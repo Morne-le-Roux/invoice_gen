@@ -38,10 +38,13 @@ const toDocumentPrefix = (value: string) => {
   return prefix.padEnd(3, "X");
 };
 
-const generateDocumentNumber = (billTo: string) => {
-  const prefix = toDocumentPrefix(billTo);
-  const digits = Math.floor(1000 + Math.random() * 9000);
-  return `${prefix}-${digits}`;
+const getDocumentSuffix = (value: string) => {
+  const match = value.trim().match(/-(\d{4})$/);
+  if (match) {
+    return match[1];
+  }
+
+  return String(Math.floor(1000 + Math.random() * 9000));
 };
 
 const formatCurrency = (value: number) =>
@@ -65,6 +68,7 @@ export default function Home() {
     DEFAULT_LOGO_ASPECT_RATIO,
   );
   const [invoiceNumber, setInvoiceNumber] = useState("1");
+  const [isInvoiceNumberAuto, setIsInvoiceNumberAuto] = useState(true);
   const [from, setFrom] = useState("");
   const [billTo, setBillTo] = useState("");
   const [shipTo, setShipTo] = useState("");
@@ -127,18 +131,14 @@ export default function Home() {
   );
 
   useEffect(() => {
-    const current = invoiceNumber.trim();
-    const shouldAutogenerate = current === "" || current === "1";
-    if (!shouldAutogenerate) {
+    if (!isInvoiceNumberAuto || !safeBillTo) {
       return;
     }
 
-    if (!safeBillTo) {
-      return;
-    }
-
-    setInvoiceNumber(generateDocumentNumber(safeBillTo));
-  }, [invoiceNumber, safeBillTo]);
+    const nextPrefix = toDocumentPrefix(safeBillTo);
+    const suffix = getDocumentSuffix(invoiceNumber);
+    setInvoiceNumber(`${nextPrefix}-${suffix}`);
+  }, [invoiceNumber, isInvoiceNumberAuto, safeBillTo]);
 
   useEffect(() => {
     if (hasRestoredFromStorage.current) {
@@ -590,7 +590,11 @@ export default function Home() {
                 </div>
                 <input
                   value={invoiceNumber}
-                  onChange={(event) => setInvoiceNumber(event.target.value)}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    setInvoiceNumber(nextValue);
+                    setIsInvoiceNumberAuto(nextValue.trim() === "");
+                  }}
                   className="w-full px-3 py-2 text-right outline-none"
                 />
               </div>
