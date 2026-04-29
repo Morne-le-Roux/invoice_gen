@@ -1,13 +1,16 @@
 "use client";
 
+import { useAuth } from "@/context/AuthContext";
+import pb from "@/lib/pocketbase";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import Image from "next/image";
+import Link from "next/link";
 import type {
   MouseEvent as ReactMouseEvent,
   PointerEvent as ReactPointerEvent,
 } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type InvoiceItem = {
   id: number;
@@ -71,7 +74,6 @@ export default function Home() {
   const [isInvoiceNumberAuto, setIsInvoiceNumberAuto] = useState(true);
   const [from, setFrom] = useState("");
   const [billTo, setBillTo] = useState("");
-  const [shipTo, setShipTo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [notes, setNotes] = useState("");
@@ -82,6 +84,13 @@ export default function Home() {
   const [amountPaid, setAmountPaid] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
+
+  // PocketBase save/load state
+  const { user, logout } = useAuth();
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState("");
+  const [saveSuccess, setSaveSuccess] = useState(false);
 
   const [items, setItems] = useState<InvoiceItem[]>([
     { id: 1, description: "", quantity: 1, rate: 0 },
@@ -97,7 +106,6 @@ export default function Home() {
 
   const safeFrom = from.trim();
   const safeBillTo = billTo.trim();
-  const safeShipTo = shipTo.trim();
   const safeInvoiceNumber = invoiceNumber.trim();
   const safeNotes = notes.trim();
   const safeTerms = terms.trim();
@@ -217,6 +225,97 @@ export default function Home() {
       // Ignore storage errors.
     }
   }, [from]);
+
+  // Load invoice from ?id= query param
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("id");
+    if (!id || !user) return;
+
+    pb.collection("invoices")
+      .getOne(id)
+      .then((record) => {
+        setSavedId(record.id);
+        setDocumentType(record.document_type);
+        setInvoiceNumber(record.invoice_number ?? "");
+        setFrom(record.from_details ?? "");
+        setBillTo(record.bill_to ?? "");
+        setInvoiceDate(record.invoice_date ?? "");
+        setDueDate(record.due_date ?? "");
+        setNotes(record.notes ?? "");
+        setTerms(record.terms ?? "");
+        setTax(record.tax ?? 0);
+        setDiscount(record.discount ?? 0);
+        setShipping(record.shipping ?? 0);
+        setAmountPaid(record.amount_paid ?? 0);
+        if (Array.isArray(record.items)) setItems(record.items);
+        setLogoDataUrl(record.logo_data_url ?? "");
+        setLogoWidth(record.logo_width ?? 192);
+      })
+      .catch((err) => console.error("Failed to load invoice", err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
+  const saveInvoice = useCallback(async () => {
+    if (!user || isSaving) return;
+    setIsSaving(true);
+    setSaveError("");
+    setSaveSuccess(false);
+
+    const data = {
+      user: user.id,
+      document_type: documentType,
+      invoice_number: invoiceNumber.trim(),
+      from_details: from,
+      bill_to: billTo,
+      invoice_date: invoiceDate,
+      due_date: dueDate,
+      notes,
+      terms,
+      tax,
+      discount,
+      shipping,
+      amount_paid: amountPaid,
+      items,
+      logo_data_url: logoDataUrl,
+      logo_width: logoWidth,
+      status: "draft",
+    };
+
+    try {
+      if (savedId) {
+        await pb.collection("invoices").update(savedId, data);
+      } else {
+        const record = await pb.collection("invoices").create(data);
+        setSavedId(record.id);
+        window.history.replaceState(null, "", `/?id=${record.id}`);
+      }
+      setSaveSuccess(true);
+      setTimeout(() => setSaveSuccess(false), 2000);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setIsSaving(false);
+    }
+  }, [
+    user,
+    isSaving,
+    savedId,
+    documentType,
+    invoiceNumber,
+    from,
+    billTo,
+    invoiceDate,
+    dueDate,
+    notes,
+    terms,
+    tax,
+    discount,
+    shipping,
+    amountPaid,
+    items,
+    logoDataUrl,
+    logoWidth,
+  ]);
 
   const resizeState = useRef<{
     startX: number;
@@ -464,6 +563,37 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-slate-100 px-4 py-8 text-slate-700 sm:px-8 print:bg-white print:p-0">
+      {/* Top nav — only when logged in */}
+      {user ? (
+        <nav className="no-print mx-auto mb-4 flex w-full max-w-6xl items-center justify-between rounded-lg border border-slate-200 bg-white px-5 py-3 shadow-sm">
+          <Link
+            href="/dashboard"
+            className="text-sm font-medium text-slate-600 hover:text-slate-900"
+          >
+            ← My Invoices
+          </Link>
+          <div className="flex items-center gap-4">
+            <span className="text-xs text-slate-400">{user.email}</span>
+            <button
+              type="button"
+              onClick={logout}
+              className="text-xs text-slate-400 hover:text-slate-700"
+            >
+              Sign out
+            </button>
+          </div>
+        </nav>
+      ) : (
+        <div className="no-print mx-auto mb-4 flex w-full max-w-6xl justify-end">
+          <Link
+            href="/login"
+            className="rounded-md border border-slate-300 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50"
+          >
+            Sign in
+          </Link>
+        </div>
+      )}
+
       <main className="mx-auto w-full max-w-6xl rounded-lg border border-slate-200 bg-white p-6 shadow-sm sm:p-8 print:max-w-none print:rounded-none print:border-0 print:p-4 print:shadow-none">
         <div className="mb-6 flex items-center justify-end">
           <label className="no-print mr-3 text-sm font-semibold text-slate-600">
@@ -480,6 +610,16 @@ export default function Home() {
             <option value="quote">Quote</option>
             <option value="proforma">Proforma Invoice</option>
           </select>
+          {user ? (
+            <button
+              type="button"
+              onClick={saveInvoice}
+              disabled={isSaving}
+              className="no-print mr-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isSaving ? "Saving…" : saveSuccess ? "Saved ✓" : "Save"}
+            </button>
+          ) : null}
           <button
             type="button"
             onClick={exportInvoice}
@@ -491,6 +631,11 @@ export default function Home() {
         </div>
         {exportError ? (
           <p className="mb-4 text-right text-sm text-red-600">{exportError}</p>
+        ) : null}
+        {saveError ? (
+          <p className="no-print mb-4 text-right text-sm text-red-600">
+            {saveError}
+          </p>
         ) : null}
 
         <div ref={invoiceRef}>
@@ -552,31 +697,17 @@ export default function Home() {
                 className="mb-5 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
               />
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-500">
-                    Bill To
-                  </label>
-                  <textarea
-                    value={billTo}
-                    onChange={(event) => setBillTo(event.target.value)}
-                    placeholder="Who is this to?"
-                    rows={3}
-                    className="w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
-                  />
-                </div>
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-500">
-                    Ship To
-                  </label>
-                  <textarea
-                    value={shipTo}
-                    onChange={(event) => setShipTo(event.target.value)}
-                    placeholder="(optional)"
-                    rows={3}
-                    className="w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
-                  />
-                </div>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-500">
+                  Bill To
+                </label>
+                <textarea
+                  value={billTo}
+                  onChange={(event) => setBillTo(event.target.value)}
+                  placeholder="Who is this to?"
+                  rows={3}
+                  className="w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
+                />
               </div>
             </div>
 
@@ -828,32 +959,14 @@ export default function Home() {
                   </>
                 ) : null}
 
-                {safeBillTo || safeShipTo ? (
-                  <div
-                    className={`mt-5 grid gap-6 ${
-                      safeBillTo && safeShipTo ? "grid-cols-2" : "grid-cols-1"
-                    }`}
-                  >
-                    {safeBillTo ? (
-                      <div>
-                        <div className="text-sm font-semibold text-slate-500">
-                          Bill To
-                        </div>
-                        <div className="whitespace-pre-wrap text-sm text-slate-800">
-                          {safeBillTo}
-                        </div>
-                      </div>
-                    ) : null}
-                    {safeShipTo ? (
-                      <div>
-                        <div className="text-sm font-semibold text-slate-500">
-                          Ship To
-                        </div>
-                        <div className="whitespace-pre-wrap text-sm text-slate-800">
-                          {safeShipTo}
-                        </div>
-                      </div>
-                    ) : null}
+                {safeBillTo ? (
+                  <div className="mt-5">
+                    <div className="text-sm font-semibold text-slate-500">
+                      Bill To
+                    </div>
+                    <div className="whitespace-pre-wrap text-sm text-slate-800">
+                      {safeBillTo}
+                    </div>
                   </div>
                 ) : null}
               </div>
