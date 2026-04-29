@@ -607,7 +607,7 @@ export default function DashboardPage() {
                           value={rec.status}
                           onChange={(e) =>
                             handleStatusChange(
-                              r.id,
+                              r.id!,
                               e.target.value as InvoiceStatus,
                             )
                           }
