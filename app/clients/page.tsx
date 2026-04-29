@@ -179,6 +179,12 @@ export default function ClientsPage() {
                 <span className="px-3 py-1.5 rounded-md text-sm font-medium text-white bg-white/10">
                   Clients
                 </span>
+                <Link
+                  href="/recurring"
+                  className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Recurring
+                </Link>
               </nav>
             </div>
             <div className="flex items-center gap-4">

@@ -6,6 +6,7 @@ import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
 import type { InvoiceRecord, InvoiceStatus } from "@/types/invoice";
 import type { DocumentType } from "@/types/invoice";
+import type { RecurringRecord } from "@/types/recurring";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { RecordModel } from "pocketbase";
@@ -92,6 +93,9 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Map<string, ClientRecord>>(new Map());
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendError, setSendError] = useState("");
+  const [upcomingRecurring, setUpcomingRecurring] = useState<RecurringRecord[]>(
+    [],
+  );
   const [emailModal, setEmailModal] = useState<{
     id: string;
     invoiceNumber: string;
@@ -110,13 +114,21 @@ export default function DashboardPage() {
     if (!user) return;
     setIsLoading(true);
     try {
-      const [records, clientRecords] = await Promise.all([
+      const [records, clientRecords, recurringRecords] = await Promise.all([
         pb
           .collection("invoices")
           .getFullList({ sort: "-created", expand: "client" }),
         pb
           .collection("clients")
           .getFullList({ sort: "client_name" })
+          .catch(() => [] as RecordModel[]),
+        pb
+          .collection("recurring_invoices")
+          .getFullList({
+            filter: "active = true",
+            sort: "next_run_date",
+            expand: "client",
+          })
           .catch(() => [] as RecordModel[]),
       ]);
       setInvoices(records);
@@ -125,6 +137,9 @@ export default function DashboardPage() {
         if (c.id) map.set(c.id, c as unknown as ClientRecord);
       }
       setClients(map);
+      setUpcomingRecurring(
+        recurringRecords.slice(0, 5) as unknown as RecurringRecord[],
+      );
     } catch (err) {
       console.error("Failed to fetch invoices", err);
     } finally {
@@ -275,6 +290,12 @@ export default function DashboardPage() {
                 >
                   Clients
                 </Link>
+                <Link
+                  href="/recurring"
+                  className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Recurring
+                </Link>
               </nav>
             </div>
             <div className="flex items-center gap-4">
@@ -334,6 +355,135 @@ export default function DashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* Upcoming Recurring Invoices */}
+        {upcomingRecurring.length > 0 && (
+          <div className="mb-8">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-slate-700">
+                Upcoming Recurring Invoices
+              </h2>
+              <Link
+                href="/recurring"
+                className="text-xs text-indigo-600 hover:text-indigo-500 transition-colors"
+              >
+                View all
+              </Link>
+            </div>
+            <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-slate-100 bg-slate-50/60">
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Client
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Frequency
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Next Date
+                    </th>
+                    <th className="px-5 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Amount
+                    </th>
+                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                      Auto-send
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {upcomingRecurring.map((rec) => {
+                    const clientName =
+                      rec.expand?.client?.client_name ||
+                      (rec.bill_to ?? "").split("\n")[0].trim() ||
+                      "—";
+                    const initials = getInitials(clientName);
+                    const avatarBg = avatarColor(clientName);
+                    const amount = rec.items.reduce(
+                      (sum, item) => sum + item.quantity * item.rate,
+                      0,
+                    );
+                    const total = Math.max(
+                      0,
+                      amount + rec.tax - rec.discount + rec.shipping,
+                    );
+                    const nextDate = rec.next_run_date
+                      ? new Date(rec.next_run_date).toLocaleDateString(
+                          "en-ZA",
+                          {
+                            day: "numeric",
+                            month: "short",
+                            year: "numeric",
+                          },
+                        )
+                      : "—";
+                    const daysUntil = rec.next_run_date
+                      ? Math.ceil(
+                          (new Date(rec.next_run_date).getTime() - Date.now()) /
+                            (1000 * 60 * 60 * 24),
+                        )
+                      : null;
+                    return (
+                      <tr
+                        key={rec.id}
+                        onClick={() =>
+                          router.push(`/recurring/new?id=${rec.id}`)
+                        }
+                        className="hover:bg-slate-50/80 transition-colors cursor-pointer"
+                      >
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div
+                              className={`w-7 h-7 rounded-full ${avatarBg} flex items-center justify-center text-white text-xs font-bold shrink-0`}
+                            >
+                              {initials}
+                            </div>
+                            <span className="font-medium text-slate-700 truncate max-w-35">
+                              {clientName}
+                            </span>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span className="capitalize text-slate-500">
+                            {rec.frequency}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-slate-700">{nextDate}</span>
+                            {daysUntil !== null &&
+                              daysUntil >= 0 &&
+                              daysUntil <= 7 && (
+                                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">
+                                  {daysUntil === 0 ? "Today" : `${daysUntil}d`}
+                                </span>
+                              )}
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right">
+                          <span className="font-semibold text-slate-800">
+                            {formatCurrency(total)}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3">
+                          <span
+                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
+                              rec.auto_send
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {rec.auto_send ? "Yes" : "No"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
 
         {isLoading ? (
           <div className="flex items-center justify-center py-20">
