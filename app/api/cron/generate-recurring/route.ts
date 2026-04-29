@@ -22,35 +22,3 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }
-
-          const htmlBody = buildEmailHtml(fullInvoice);
-
-          await fetch("https://api.smtp2go.com/v3/email/send", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              api_key: process.env.SMTP2GO_API_KEY,
-              to: [recipientEmail],
-              sender: process.env.SMTP2GO_SENDER,
-              subject: `Invoice #${invoiceNumber}`,
-              html_body: htmlBody,
-            }),
-          });
-
-          await pb
-            .collection("invoices")
-            .update(created.id, { status: "sent" });
-        }
-      }
-
-      results.push({ id: rec.id, invoiceId: created.id });
-    } catch (err) {
-      results.push({
-        id: rec.id,
-        error: err instanceof Error ? err.message : "Unknown error",
-      });
-    }
-  }
-
-  return NextResponse.json({ processed: results.length, results });
-}
