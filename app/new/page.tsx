@@ -3,6 +3,7 @@
 import { useAuth } from "@/context/AuthContext";
 import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
+import type { InvoiceRecord } from "@/types/invoice";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import Image from "next/image";

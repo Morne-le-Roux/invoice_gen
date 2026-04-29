@@ -541,6 +541,7 @@ export default function DashboardPage() {
               <tbody className="divide-y divide-slate-50">
                 {invoices.map((r) => {
                   const rec = r as RecordModel & InvoiceRecord;
+                  const recordId = r.id!;
                   const clientName = getClientName(rec);
                   const initials = getInitials(clientName);
                   const avatarBg = avatarColor(clientName);
@@ -624,10 +625,10 @@ export default function DashboardPage() {
                       </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5 justify-end">
-                          {deleteId === r.id ? (
+                          {deleteId === recordId ? (
                             <>
                               <button
-                                onClick={() => handleDelete(r.id)}
+                                onClick={() => handleDelete(recordId)}
                                 className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
                               >
                                 Confirm
@@ -644,7 +645,7 @@ export default function DashboardPage() {
                               {rec.status !== "sent" &&
                                 rec.status !== "paid" && (
                                   <Link
-                                    href={`/new?id=${r.id}`}
+                                    href={`/new?id=${recordId}`}
                                     className="inline-flex items-center rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                                   >
                                     Edit
@@ -652,7 +653,7 @@ export default function DashboardPage() {
                                 )}
                               <button
                                 onClick={() => openSendModal(rec)}
-                                disabled={sendingId === r.id}
+                                disabled={sendingId === recordId}
                                 className="inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50"
                               >
                                 {rec.status === "sent" || rec.status === "paid"
@@ -660,7 +661,7 @@ export default function DashboardPage() {
                                   : "Send"}
                               </button>
                               <button
-                                onClick={() => setDeleteId(r.id)}
+                                onClick={() => setDeleteId(recordId)}
                                 className="inline-flex items-center rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors"
                               >
                                 Delete
