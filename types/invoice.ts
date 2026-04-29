@@ -30,4 +30,14 @@ export type InvoiceRecord = {
   logo_data_url: string;
   logo_width: number;
   status: InvoiceStatus;
+  client_email?: string;
+  client?: string;
+  expand?: {
+    client?: {
+      id: string;
+      client_name: string;
+      email: string;
+      details: string;
+    };
+  };
 };

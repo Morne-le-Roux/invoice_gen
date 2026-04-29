@@ -2,14 +2,12 @@
 
 import { useAuth } from "@/context/AuthContext";
 import pb from "@/lib/pocketbase";
+import type { ClientRecord } from "@/types/client";
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
 import Image from "next/image";
 import Link from "next/link";
-import type {
-  MouseEvent as ReactMouseEvent,
-  PointerEvent as ReactPointerEvent,
-} from "react";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type InvoiceItem = {
@@ -22,32 +20,31 @@ type InvoiceItem = {
 type DocumentType = "invoice" | "quote" | "proforma";
 
 const STORAGE_KEYS = {
-  logoDataUrl: "invoice_gen.logoDataUrl",
-  logoWidth: "invoice_gen.logoWidth",
   from: "invoice_gen.from",
 } as const;
-
-const MIN_LOGO_WIDTH = 80;
-const MAX_LOGO_WIDTH = 640;
-const DEFAULT_LOGO_ASPECT_RATIO = 2 / 3;
 
 const toDocumentPrefix = (value: string) => {
   const lettersOnly = value
     .trim()
     .toUpperCase()
     .replace(/[^A-Z]/g, "");
-
-  const prefix = lettersOnly.slice(0, 3);
-  return prefix.padEnd(3, "X");
+  return lettersOnly.slice(0, 3).padEnd(3, "X");
 };
 
-const getDocumentSuffix = (value: string) => {
-  const match = value.trim().match(/-(\d{4})$/);
-  if (match) {
-    return match[1];
+const generateInvoiceNumber = (existing: string, prefix: string) => {
+  // Keep the same number if it already matches PREFIX-MMDD-NNN to avoid churn on re-renders
+  if (/^[A-Z]{3}-\d{4}-\d{3}$/.test(existing.trim())) {
+    // Only regenerate if the prefix has changed
+    if (existing.trim().startsWith(prefix + "-")) {
+      return existing.trim();
+    }
   }
 
-  return String(Math.floor(1000 + Math.random() * 9000));
+  const now = new Date();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+  const rand = String(Math.floor(100 + Math.random() * 900));
+  return `${prefix}-${mm}${dd}-${rand}`;
 };
 
 const formatCurrency = (value: number) =>
@@ -60,16 +57,9 @@ const formatCurrency = (value: number) =>
 export default function Home() {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const exportInvoiceRef = useRef<HTMLDivElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
-
   const hasRestoredFromStorage = useRef(false);
 
   const [documentType, setDocumentType] = useState<DocumentType>("invoice");
-  const [logoDataUrl, setLogoDataUrl] = useState("");
-  const [logoWidth, setLogoWidth] = useState(192);
-  const [logoAspectRatio, setLogoAspectRatio] = useState(
-    DEFAULT_LOGO_ASPECT_RATIO,
-  );
   const [invoiceNumber, setInvoiceNumber] = useState("1");
   const [isInvoiceNumberAuto, setIsInvoiceNumberAuto] = useState(true);
   const [from, setFrom] = useState("");
@@ -82,11 +72,28 @@ export default function Home() {
   const [discount, setDiscount] = useState(0);
   const [shipping, setShipping] = useState(0);
   const [amountPaid, setAmountPaid] = useState(0);
+  const [clientEmail, setClientEmail] = useState("");
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
+  const selectedClientIdRef = useRef<string | null>(null);
+  selectedClientIdRef.current = selectedClientId;
+  const [selectedClient, setSelectedClient] = useState<ClientRecord | null>(
+    null,
+  );
+  const [clients, setClients] = useState<ClientRecord[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
   const [exportError, setExportError] = useState("");
 
   // PocketBase save/load state
-  const { user, logout } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
+  const router = useRouter();
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push("/login");
+    }
+  }, [user, authLoading, router]);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
@@ -107,10 +114,9 @@ export default function Home() {
   const safeFrom = from.trim();
   const safeBillTo = billTo.trim();
   const safeInvoiceNumber = invoiceNumber.trim();
+  const prefixSource = selectedClient?.client_name ?? safeBillTo;
   const safeNotes = notes.trim();
   const safeTerms = terms.trim();
-
-  const logoHeight = Math.round(logoWidth * logoAspectRatio);
 
   const documentTitle =
     documentType === "quote"
@@ -139,14 +145,14 @@ export default function Home() {
   );
 
   useEffect(() => {
-    if (!isInvoiceNumberAuto || !safeBillTo) {
+    if (!isInvoiceNumberAuto) {
       return;
     }
 
-    const nextPrefix = toDocumentPrefix(safeBillTo);
-    const suffix = getDocumentSuffix(invoiceNumber);
-    setInvoiceNumber(`${nextPrefix}-${suffix}`);
-  }, [invoiceNumber, isInvoiceNumberAuto, safeBillTo]);
+    const prefix = toDocumentPrefix(prefixSource);
+    setInvoiceNumber((prev) => generateInvoiceNumber(prev, prefix));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isInvoiceNumberAuto, prefixSource]);
 
   useEffect(() => {
     if (hasRestoredFromStorage.current) {
@@ -154,24 +160,8 @@ export default function Home() {
     }
 
     try {
-      const storedLogo = localStorage.getItem(STORAGE_KEYS.logoDataUrl);
-      const storedLogoWidth = localStorage.getItem(STORAGE_KEYS.logoWidth);
       const storedFrom = localStorage.getItem(STORAGE_KEYS.from);
 
-      if (storedLogo) {
-        setLogoDataUrl(storedLogo);
-      }
-      if (storedLogoWidth) {
-        const parsedWidth = Number(storedLogoWidth);
-        if (Number.isFinite(parsedWidth)) {
-          setLogoWidth(
-            Math.min(
-              MAX_LOGO_WIDTH,
-              Math.max(MIN_LOGO_WIDTH, Math.round(parsedWidth)),
-            ),
-          );
-        }
-      }
       if (storedFrom) {
         setFrom(storedFrom);
       }
@@ -188,34 +178,6 @@ export default function Home() {
     }
 
     try {
-      if (logoDataUrl) {
-        localStorage.setItem(STORAGE_KEYS.logoDataUrl, logoDataUrl);
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.logoDataUrl);
-      }
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [logoDataUrl]);
-
-  useEffect(() => {
-    if (!hasRestoredFromStorage.current) {
-      return;
-    }
-
-    try {
-      localStorage.setItem(STORAGE_KEYS.logoWidth, String(logoWidth));
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [logoWidth]);
-
-  useEffect(() => {
-    if (!hasRestoredFromStorage.current) {
-      return;
-    }
-
-    try {
       if (from) {
         localStorage.setItem(STORAGE_KEYS.from, from);
       } else {
@@ -225,6 +187,24 @@ export default function Home() {
       // Ignore storage errors.
     }
   }, [from]);
+
+  // Load clients
+  useEffect(() => {
+    if (!user) return;
+    pb.collection("clients")
+      .getFullList({
+        sort: "client_name",
+      })
+      .then((records) => setClients(records as unknown as ClientRecord[]))
+      .catch(() => {}); // Collection may not exist yet
+  }, [user]);
+
+  // Sync selectedClient when clients list or selectedClientId changes
+  useEffect(() => {
+    if (!selectedClientId || clients.length === 0) return;
+    const c = clients.find((c) => c.id === selectedClientId);
+    if (c) setSelectedClient(c);
+  }, [selectedClientId, clients]);
 
   // Load invoice from ?id= query param
   useEffect(() => {
@@ -247,9 +227,12 @@ export default function Home() {
         setDiscount(record.discount ?? 0);
         setShipping(record.shipping ?? 0);
         setAmountPaid(record.amount_paid ?? 0);
+        const expandedClient = (
+          record.expand as InvoiceRecord["expand"] | undefined
+        )?.client;
+        setSelectedClientId(record.client ?? null);
+        setClientEmail(expandedClient?.email ?? record.client_email ?? "");
         if (Array.isArray(record.items)) setItems(record.items);
-        setLogoDataUrl(record.logo_data_url ?? "");
-        setLogoWidth(record.logo_width ?? 192);
       })
       .catch((err) => console.error("Failed to load invoice", err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -276,9 +259,8 @@ export default function Home() {
       shipping,
       amount_paid: amountPaid,
       items,
-      logo_data_url: logoDataUrl,
-      logo_width: logoWidth,
       status: "draft",
+      client: selectedClientIdRef.current || null,
     };
 
     try {
@@ -289,8 +271,7 @@ export default function Home() {
         setSavedId(record.id);
         window.history.replaceState(null, "", `/?id=${record.id}`);
       }
-      setSaveSuccess(true);
-      setTimeout(() => setSaveSuccess(false), 2000);
+      router.push("/dashboard");
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : "Save failed.");
     } finally {
@@ -313,90 +294,7 @@ export default function Home() {
     shipping,
     amountPaid,
     items,
-    logoDataUrl,
-    logoWidth,
   ]);
-
-  const resizeState = useRef<{
-    startX: number;
-    startWidth: number;
-    pointerId: number;
-  } | null>(null);
-
-  const startLogoResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    resizeState.current = {
-      startX: event.clientX,
-      startWidth: logoWidth,
-      pointerId: event.pointerId,
-    };
-
-    event.currentTarget.setPointerCapture(event.pointerId);
-  };
-
-  const moveLogoResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const state = resizeState.current;
-    if (!state || event.pointerId !== state.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-
-    const deltaX = event.clientX - state.startX;
-    const nextWidth = Math.min(
-      MAX_LOGO_WIDTH,
-      Math.max(MIN_LOGO_WIDTH, Math.round(state.startWidth + deltaX)),
-    );
-    setLogoWidth(nextWidth);
-  };
-
-  const endLogoResize = (event: ReactPointerEvent<HTMLDivElement>) => {
-    const state = resizeState.current;
-    if (!state || event.pointerId !== state.pointerId) {
-      return;
-    }
-
-    event.preventDefault();
-    resizeState.current = null;
-  };
-
-  const openLogoPicker = (event: ReactMouseEvent<HTMLElement>) => {
-    const target = event.target as HTMLElement | null;
-    if (target?.closest('[data-logo-resize-handle="true"]')) {
-      return;
-    }
-
-    logoInputRef.current?.click();
-  };
-
-  useEffect(() => {
-    if (!logoDataUrl) {
-      setLogoAspectRatio(DEFAULT_LOGO_ASPECT_RATIO);
-      return;
-    }
-
-    let isCancelled = false;
-    const img = new window.Image();
-    img.onload = () => {
-      if (isCancelled) {
-        return;
-      }
-
-      if (img.naturalWidth > 0 && img.naturalHeight > 0) {
-        const ratio = img.naturalHeight / img.naturalWidth;
-        if (Number.isFinite(ratio) && ratio > 0) {
-          setLogoAspectRatio(ratio);
-        }
-      }
-    };
-    img.src = logoDataUrl;
-
-    return () => {
-      isCancelled = true;
-    };
-  }, [logoDataUrl]);
 
   const handleItemChange = (
     id: number,
@@ -427,20 +325,6 @@ export default function Home() {
       ...previousItems,
       { id: Date.now(), description: "", quantity: 1, rate: 0 },
     ]);
-  };
-
-  const uploadLogo = (file: File | null) => {
-    if (!file) {
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setLogoDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
   };
 
   const exportInvoice = async () => {
@@ -552,6 +436,35 @@ export default function Home() {
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
+
+      // Save/update the invoice in the DB as "sent" then go to dashboard
+      if (user) {
+        const data = {
+          user: user.id,
+          document_type: documentType,
+          invoice_number: invoiceNumber.trim(),
+          from_details: from,
+          bill_to: billTo,
+          invoice_date: invoiceDate,
+          due_date: dueDate,
+          notes,
+          terms,
+          tax,
+          discount,
+          shipping,
+          amount_paid: amountPaid,
+          items,
+          status: "sent",
+          client: selectedClientIdRef.current || null,
+        };
+        if (savedId) {
+          await pb.collection("invoices").update(savedId, data);
+        } else {
+          const record = await pb.collection("invoices").create(data);
+          setSavedId(record.id);
+        }
+        router.push("/dashboard");
+      }
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Invoice export failed.";
@@ -602,9 +515,19 @@ export default function Home() {
           <select
             className="no-print mr-4 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-700 outline-none focus:border-slate-400"
             value={documentType}
-            onChange={(event) =>
-              setDocumentType(event.target.value as DocumentType)
-            }
+            onChange={async (event) => {
+              const next = event.target.value as DocumentType;
+              setDocumentType(next);
+              if (savedId) {
+                try {
+                  await pb
+                    .collection("invoices")
+                    .update(savedId, { document_type: next });
+                } catch {
+                  // Non-critical — type is still updated locally
+                }
+              }
+            }}
           >
             <option value="invoice">Invoice</option>
             <option value="quote">Quote</option>
@@ -615,19 +538,11 @@ export default function Home() {
               type="button"
               onClick={saveInvoice}
               disabled={isSaving}
-              className="no-print mr-2 rounded-md border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+              className="no-print rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              {isSaving ? "Saving…" : saveSuccess ? "Saved ✓" : "Save"}
+              {isSaving ? "Saving…" : "Save as Draft"}
             </button>
           ) : null}
-          <button
-            type="button"
-            onClick={exportInvoice}
-            disabled={isExporting}
-            className="no-print rounded-md bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isExporting ? "Generating PDF..." : `Export ${documentTitle}`}
-          </button>
         </div>
         {exportError ? (
           <p className="mb-4 text-right text-sm text-red-600">{exportError}</p>
@@ -641,50 +556,15 @@ export default function Home() {
         <div ref={invoiceRef}>
           <section className="grid gap-6 md:grid-cols-[1fr_280px]">
             <div>
-              <input
-                ref={logoInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={(event) =>
-                  uploadLogo(event.target.files?.[0] ?? null)
-                }
-              />
-              <button
-                type="button"
-                onClick={openLogoPicker}
-                className="relative mb-4 flex items-center justify-center rounded border border-slate-300 bg-slate-50 text-slate-400"
-                style={{ width: logoWidth, height: logoHeight }}
-              >
-                {logoDataUrl ? (
-                  <Image
-                    src={logoDataUrl}
-                    alt="Company logo"
-                    width={logoWidth}
-                    height={logoHeight}
-                    unoptimized
-                    className="h-full w-full object-contain"
-                  />
-                ) : (
-                  <span className="font-semibold">+ Add Your Logo</span>
-                )}
-
-                {logoDataUrl ? (
-                  <div
-                    className="no-print absolute bottom-1 right-1 h-4 w-4 rounded border border-slate-300 bg-white/80"
-                    data-logo-resize-handle="true"
-                    style={{ cursor: "se-resize", touchAction: "none" }}
-                    onPointerDown={startLogoResize}
-                    onPointerMove={moveLogoResize}
-                    onPointerUp={endLogoResize}
-                    onPointerCancel={endLogoResize}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                    }}
-                  />
-                ) : null}
-              </button>
+              <div className="mb-4">
+                <Image
+                  src="/DisNetDev Software.svg"
+                  alt="DisNetDev Software logo"
+                  width={320}
+                  height={107}
+                  className="w-full object-contain"
+                />
+              </div>
 
               <label className="mb-2 block text-sm font-semibold text-slate-500">
                 Who is this from?
@@ -701,6 +581,111 @@ export default function Home() {
                 <label className="mb-2 block text-sm font-semibold text-slate-500">
                   Bill To
                 </label>
+
+                {/* Client search (editor only, not printed) */}
+                <div className="no-print relative mb-2">
+                  {selectedClient ? (
+                    <div className="flex items-center gap-2 rounded border border-slate-300 bg-slate-50 px-3 py-2">
+                      <span className="flex-1 text-sm font-medium text-slate-700">
+                        {selectedClient.client_name}
+                      </span>
+                      {selectedClient.email && (
+                        <span className="text-xs text-slate-400">
+                          {selectedClient.email}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedClient(null);
+                          setSelectedClientId(null);
+                          setClientSearch("");
+                        }}
+                        className="ml-1 text-slate-400 hover:text-slate-600 text-sm leading-none"
+                        aria-label="Clear client"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={clientSearch}
+                        onChange={(e) => {
+                          setClientSearch(e.target.value);
+                          setShowClientDropdown(true);
+                        }}
+                        onFocus={() => setShowClientDropdown(true)}
+                        onBlur={() =>
+                          setTimeout(() => setShowClientDropdown(false), 150)
+                        }
+                        placeholder="Search clients…"
+                        className="w-full rounded border border-slate-300 px-3 py-2 text-sm outline-none focus:border-slate-400"
+                      />
+                      {showClientDropdown && (
+                        <div className="absolute z-20 mt-1 w-full rounded border border-slate-200 bg-white shadow-lg max-h-48 overflow-y-auto">
+                          {clients
+                            .filter(
+                              (c) =>
+                                !clientSearch ||
+                                c.client_name
+                                  .toLowerCase()
+                                  .includes(clientSearch.toLowerCase()) ||
+                                c.email
+                                  .toLowerCase()
+                                  .includes(clientSearch.toLowerCase()),
+                            )
+                            .map((c) => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onMouseDown={() => {
+                                  setSelectedClient(c);
+                                  setSelectedClientId(c.id ?? null);
+                                  setBillTo(c.details);
+                                  setClientEmail(c.email);
+                                  setClientSearch("");
+                                  setShowClientDropdown(false);
+                                }}
+                                className="flex w-full flex-col px-3 py-2 text-left text-sm hover:bg-slate-50 border-b border-slate-100 last:border-0"
+                              >
+                                <span className="font-medium text-slate-800">
+                                  {c.client_name}
+                                </span>
+                                {c.email && (
+                                  <span className="text-xs text-slate-400">
+                                    {c.email}
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          {clients.filter(
+                            (c) =>
+                              !clientSearch ||
+                              c.client_name
+                                .toLowerCase()
+                                .includes(clientSearch.toLowerCase()) ||
+                              c.email
+                                .toLowerCase()
+                                .includes(clientSearch.toLowerCase()),
+                          ).length === 0 && (
+                            <div className="px-3 py-2 text-sm text-slate-400">
+                              No clients found.{" "}
+                              <Link
+                                href="/clients"
+                                className="text-blue-600 hover:underline"
+                              >
+                                Add one?
+                              </Link>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
                 <textarea
                   value={billTo}
                   onChange={(event) => setBillTo(event.target.value)}
@@ -928,6 +913,20 @@ export default function Home() {
               ) : null}
             </div>
           </section>
+
+          {/* Banking details - always shown at bottom left */}
+          <div className="mt-8 border-t border-slate-200 pt-6">
+            <div className="text-sm font-semibold text-slate-500">
+              Banking Details
+            </div>
+            <div className="mt-1 text-sm text-slate-800 leading-relaxed">
+              <div>Account Holder: DisNetDev</div>
+              <div>Account Type: Savings Account</div>
+              <div>Discovery Bank</div>
+              <div>Branch Code: 679000</div>
+              <div>Account Number: 19742778391</div>
+            </div>
+          </div>
         </div>
 
         {/* Export-only render (plain text, no inputs). Kept off-screen but in DOM for html-to-image. */}
@@ -938,15 +937,12 @@ export default function Home() {
           >
             <div className="mb-8 flex items-start justify-between gap-8">
               <div className="min-w-0">
-                {logoDataUrl ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={logoDataUrl}
-                    alt="Company logo"
-                    className="mb-4 object-contain"
-                    style={{ width: logoWidth, height: logoHeight }}
-                  />
-                ) : null}
+                <img
+                  src="/DisNetDev Software.svg"
+                  alt="DisNetDev Software logo"
+                  className="mb-4 w-full object-contain"
+                  style={{ maxWidth: 320 }}
+                />
 
                 {safeFrom ? (
                   <>
@@ -1137,6 +1133,20 @@ export default function Home() {
                     </span>
                   </div>
                 ) : null}
+              </div>
+            </div>
+
+            {/* Banking details - always shown at bottom left */}
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <div className="text-sm font-semibold text-slate-500">
+                Banking Details
+              </div>
+              <div className="mt-1 text-sm text-slate-800 leading-relaxed">
+                <div>Account Holder: DisNetDev</div>
+                <div>Account Type: Savings Account</div>
+                <div>Discovery Bank</div>
+                <div>Branch Code: 679000</div>
+                <div>Account Number: 19742778391</div>
               </div>
             </div>
           </div>
