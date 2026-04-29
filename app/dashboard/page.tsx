@@ -18,10 +18,48 @@ const STATUS_LABELS: Record<InvoiceStatus, string> = {
 };
 
 const STATUS_COLORS: Record<InvoiceStatus, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  sent: "bg-blue-100 text-blue-700",
-  paid: "bg-green-100 text-green-700",
+  draft: "bg-slate-100 text-slate-600",
+  sent: "bg-indigo-100 text-indigo-700",
+  paid: "bg-emerald-100 text-emerald-700",
 };
+
+const AVATAR_COLORS = [
+  "bg-violet-500",
+  "bg-indigo-500",
+  "bg-sky-500",
+  "bg-emerald-500",
+  "bg-amber-500",
+  "bg-rose-500",
+  "bg-pink-500",
+  "bg-teal-500",
+];
+
+function getInitials(name: string): string {
+  return (
+    name
+      .split(/\s+/)
+      .slice(0, 2)
+      .map((w) => w[0])
+      .join("")
+      .toUpperCase() || "?"
+  );
+}
+
+function avatarColor(name: string): string {
+  let hash = 0;
+  for (const c of name) hash = (hash * 31 + c.charCodeAt(0)) & 0xffff;
+  return AVATAR_COLORS[hash % AVATAR_COLORS.length];
+}
+
+function getClientName(rec: RecordModel & InvoiceRecord): string {
+  const expanded = (rec.expand as Record<string, RecordModel> | undefined)?.[
+    "client"
+  ];
+  const expandName = expanded?.["client_name"] as string | undefined;
+  if (expandName) return expandName;
+  const firstLine = (rec.bill_to ?? "").split("\n")[0].trim();
+  return firstLine || "—";
+}
 
 const DOC_TYPE_LABELS: Record<string, string> = {
   invoice: "Invoice",
@@ -189,81 +227,209 @@ export default function DashboardPage() {
 
   if (authLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-gray-400 text-sm">
-        Loading…
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-sm text-slate-400">Loading…</div>
       </div>
     );
   }
 
   if (!user) return null;
 
+  const totalBilled = invoices
+    .filter(
+      (r) =>
+        r.status === "paid" ||
+        ((r as InvoiceRecord).document_type !== "quote" &&
+          (r as InvoiceRecord).document_type !== "proforma"),
+    )
+    .reduce((s, r) => s + calcTotal(r as InvoiceRecord), 0);
+  const totalPaid = invoices
+    .filter((r) => r.status === "paid")
+    .reduce((s, r) => s + calcTotal(r as InvoiceRecord), 0);
+  const totalOutstanding = invoices
+    .filter(
+      (r) =>
+        r.status !== "paid" &&
+        (r as InvoiceRecord).document_type !== "quote" &&
+        (r as InvoiceRecord).document_type !== "proforma",
+    )
+    .reduce((s, r) => s + calcTotal(r as InvoiceRecord), 0);
+
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-gray-900">Invoices</h1>
-        <div className="flex items-center gap-3">
-          <span className="text-sm text-gray-500">{user.email}</span>
-          <Link
-            href="/clients"
-            className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Clients
-          </Link>
-          <Link
-            href="/"
-            className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-4 py-2 transition-colors"
-          >
-            + New Invoice
-          </Link>
-          <button
-            onClick={logout}
-            className="text-sm text-gray-500 hover:text-gray-800 transition-colors"
-          >
-            Sign out
-          </button>
+    <div className="min-h-screen bg-slate-50">
+      {/* Top Nav */}
+      <header className="bg-slate-900">
+        <div className="max-w-6xl mx-auto px-6">
+          <div className="flex items-center justify-between h-14">
+            <div className="flex items-center gap-8">
+              <span className="text-white font-bold tracking-tight">
+                DisNetDev
+              </span>
+              <nav className="flex items-center gap-1">
+                <span className="px-3 py-1.5 rounded-md text-sm font-medium text-white bg-white/10">
+                  Invoices
+                </span>
+                <Link
+                  href="/clients"
+                  className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Clients
+                </Link>
+              </nav>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className="text-sm text-slate-400">{user.email}</span>
+              <Link
+                href="/new"
+                className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-3.5 py-1.5 text-sm font-medium text-white transition-colors"
+              >
+                <span className="text-base leading-none">+</span> New Invoice
+              </Link>
+              <button
+                onClick={logout}
+                className="text-sm text-slate-400 hover:text-white transition-colors"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-6 py-8">
-        {isLoading ? (
-          <p className="text-sm text-gray-400">Loading invoices…</p>
-        ) : invoices.length === 0 ? (
-          <div className="text-center py-20">
-            <p className="text-gray-400 text-sm mb-4">No invoices yet.</p>
-            <Link
-              href="/"
-              className="bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-lg px-5 py-2 transition-colors"
+      <main className="max-w-6xl mx-auto px-6 py-8">
+        <h1 className="text-2xl font-bold text-slate-900 mb-6">Invoices</h1>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
+          {[
+            {
+              label: "Total Invoices",
+              value: String(invoices.length),
+              accent: "text-slate-800",
+            },
+            {
+              label: "Total Billed",
+              value: formatCurrency(totalBilled),
+              accent: "text-slate-800",
+            },
+            {
+              label: "Paid",
+              value: formatCurrency(totalPaid),
+              accent: "text-emerald-600",
+            },
+            {
+              label: "Outstanding",
+              value: formatCurrency(totalOutstanding),
+              accent: "text-amber-600",
+            },
+          ].map((s) => (
+            <div
+              key={s.label}
+              className="rounded-xl bg-white border border-slate-200 px-5 py-4"
             >
-              Create your first invoice
+              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                {s.label}
+              </p>
+              <p className={`text-xl font-bold ${s.accent}`}>{s.value}</p>
+            </div>
+          ))}
+        </div>
+
+        {isLoading ? (
+          <div className="flex items-center justify-center py-20">
+            <p className="text-sm text-slate-400">Loading invoices…</p>
+          </div>
+        ) : invoices.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-24 rounded-2xl bg-white border border-slate-200">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center mb-4">
+              <svg
+                className="w-7 h-7 text-slate-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+            </div>
+            <p className="text-slate-500 text-sm mb-5">No invoices yet.</p>
+            <Link
+              href="/new"
+              className="inline-flex items-center gap-1 rounded-lg bg-indigo-600 hover:bg-indigo-500 px-4 py-2 text-sm font-medium text-white transition-colors"
+            >
+              + Create your first invoice
             </Link>
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+          <div className="rounded-2xl border border-slate-200 bg-white overflow-hidden">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b border-gray-100 text-left text-xs text-gray-400 uppercase tracking-wide">
-                  <th className="px-5 py-3">Number</th>
-                  <th className="px-5 py-3">Type</th>
-                  <th className="px-5 py-3">Client</th>
-                  <th className="px-5 py-3">Date</th>
-                  <th className="px-5 py-3 text-right">Total</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3" />
+                <tr className="border-b border-slate-100 bg-slate-50/60">
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Invoice
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Client
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Date
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Type
+                  </th>
+                  <th className="px-5 py-3.5 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Amount
+                  </th>
+                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
+                    Status
+                  </th>
+                  <th className="px-5 py-3.5" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-slate-50">
                 {invoices.map((r) => {
                   const rec = r as RecordModel & InvoiceRecord;
+                  const clientName = getClientName(rec);
+                  const initials = getInitials(clientName);
+                  const avatarBg = avatarColor(clientName);
                   return (
                     <tr
                       key={r.id}
-                      className="border-b border-gray-50 last:border-0 hover:bg-gray-50 transition-colors"
+                      className="hover:bg-slate-50/80 transition-colors"
                     >
-                      <td className="px-5 py-3 font-mono text-gray-700">
-                        {rec.invoice_number}
+                      <td className="px-5 py-3.5">
+                        <span className="font-mono text-sm font-medium text-slate-700">
+                          {rec.invoice_number || (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </span>
                       </td>
-                      <td className="px-5 py-3 text-gray-500">
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center gap-2.5">
+                          <div
+                            className={`w-7 h-7 rounded-full ${avatarBg} flex items-center justify-center text-white text-xs font-bold shrink-0`}
+                          >
+                            {initials}
+                          </div>
+                          <span className="font-medium text-slate-700 truncate max-w-35">
+                            {clientName !== "—" ? (
+                              clientName
+                            ) : (
+                              <span className="text-slate-300">—</span>
+                            )}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="px-5 py-3.5 text-slate-500">
+                        {rec.invoice_date || (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
+                      <td className="px-5 py-3.5">
                         <select
                           value={rec.document_type}
                           onChange={(e) =>
@@ -272,7 +438,7 @@ export default function DashboardPage() {
                               e.target.value as DocumentType,
                             )
                           }
-                          className="text-xs font-medium rounded-full px-2 py-0.5 border-0 cursor-pointer bg-gray-100 text-gray-600"
+                          className="text-xs font-medium rounded-full px-2.5 py-1 border border-slate-200 cursor-pointer bg-slate-50 text-slate-600 hover:bg-slate-100 outline-none transition-colors"
                         >
                           {Object.entries(DOC_TYPE_LABELS).map(
                             ([value, label]) => (
@@ -283,20 +449,12 @@ export default function DashboardPage() {
                           )}
                         </select>
                       </td>
-                      <td className="px-5 py-3 text-gray-700">
-                        {rec.bill_to || (
-                          <span className="text-gray-300">—</span>
-                        )}
+                      <td className="px-5 py-3.5 text-right">
+                        <span className="font-semibold text-slate-800">
+                          {formatCurrency(calcTotal(rec))}
+                        </span>
                       </td>
-                      <td className="px-5 py-3 text-gray-500">
-                        {rec.invoice_date || (
-                          <span className="text-gray-300">—</span>
-                        )}
-                      </td>
-                      <td className="px-5 py-3 text-right font-medium text-gray-800">
-                        {formatCurrency(calcTotal(rec))}
-                      </td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-3.5">
                         <select
                           value={rec.status}
                           onChange={(e) =>
@@ -305,7 +463,7 @@ export default function DashboardPage() {
                               e.target.value as InvoiceStatus,
                             )
                           }
-                          className={`text-xs font-medium rounded-full px-2 py-0.5 border-0 cursor-pointer ${STATUS_COLORS[rec.status as InvoiceStatus] ?? ""}`}
+                          className={`text-xs font-semibold rounded-full px-2.5 py-1 border-0 cursor-pointer outline-none transition-colors ${STATUS_COLORS[rec.status as InvoiceStatus] ?? ""}`}
                         >
                           {(Object.keys(STATUS_LABELS) as InvoiceStatus[]).map(
                             (s) => (
@@ -316,19 +474,19 @@ export default function DashboardPage() {
                           )}
                         </select>
                       </td>
-                      <td className="px-5 py-3">
+                      <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5 justify-end">
                           {deleteId === r.id ? (
                             <>
                               <button
                                 onClick={() => handleDelete(r.id)}
-                                className="inline-flex items-center rounded-md border border-red-200 bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
+                                className="inline-flex items-center rounded-lg border border-red-200 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700 hover:bg-red-100 transition-colors"
                               >
                                 Confirm
                               </button>
                               <button
                                 onClick={() => setDeleteId(null)}
-                                className="inline-flex items-center rounded-md border border-gray-200 bg-gray-50 px-2.5 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 transition-colors"
+                                className="inline-flex items-center rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-medium text-slate-500 hover:bg-slate-100 transition-colors"
                               >
                                 Cancel
                               </button>
@@ -338,8 +496,8 @@ export default function DashboardPage() {
                               {rec.status !== "sent" &&
                                 rec.status !== "paid" && (
                                   <Link
-                                    href={`/?id=${r.id}`}
-                                    className="inline-flex items-center rounded-md border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700 hover:bg-blue-100 transition-colors"
+                                    href={`/new?id=${r.id}`}
+                                    className="inline-flex items-center rounded-lg border border-slate-200 px-2.5 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
                                   >
                                     Edit
                                   </Link>
@@ -347,7 +505,7 @@ export default function DashboardPage() {
                               <button
                                 onClick={() => openSendModal(rec)}
                                 disabled={sendingId === r.id}
-                                className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 hover:bg-emerald-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="inline-flex items-center rounded-lg border border-indigo-200 bg-indigo-50 px-2.5 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors disabled:opacity-50"
                               >
                                 {rec.status === "sent" || rec.status === "paid"
                                   ? "Resend"
@@ -355,7 +513,7 @@ export default function DashboardPage() {
                               </button>
                               <button
                                 onClick={() => setDeleteId(r.id)}
-                                className="inline-flex items-center rounded-md border border-transparent px-2.5 py-1 text-xs font-medium text-gray-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                className="inline-flex items-center rounded-lg border border-transparent px-2.5 py-1.5 text-xs font-medium text-slate-400 hover:border-red-200 hover:bg-red-50 hover:text-red-600 transition-colors"
                               >
                                 Delete
                               </button>
@@ -374,50 +532,56 @@ export default function DashboardPage() {
 
       {/* Email send modal */}
       {emailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
-            <h2 className="text-base font-semibold text-gray-900 mb-1">
-              {emailModal.alreadySent ? "Resend Invoice" : "Send Invoice"}
-            </h2>
-            <p className="text-sm text-gray-500 mb-4">
-              {emailModal.alreadySent
-                ? `Resend invoice #${emailModal.invoiceNumber} to client.`
-                : `Send invoice #${emailModal.invoiceNumber} to client.`}
-            </p>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Client email address
-            </label>
-            <input
-              type="email"
-              value={emailModal.email}
-              onChange={(e) =>
-                setEmailModal((m) => (m ? { ...m, email: e.target.value } : m))
-              }
-              onKeyDown={(e) => e.key === "Enter" && handleSendEmail()}
-              placeholder="client@example.com"
-              className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 mb-3"
-              autoFocus
-            />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
+            <div className="mb-5">
+              <h2 className="text-base font-semibold text-slate-900">
+                {emailModal.alreadySent ? "Resend Invoice" : "Send Invoice"}
+              </h2>
+              <p className="text-sm text-slate-500 mt-0.5">
+                {emailModal.alreadySent
+                  ? `Resend invoice #${emailModal.invoiceNumber} to client.`
+                  : `Send invoice #${emailModal.invoiceNumber} to client.`}
+              </p>
+            </div>
+            <div className="space-y-1 mb-4">
+              <label className="block text-sm font-medium text-slate-700">
+                Recipient email
+              </label>
+              <input
+                type="email"
+                value={emailModal.email}
+                onChange={(e) =>
+                  setEmailModal((m) =>
+                    m ? { ...m, email: e.target.value } : m,
+                  )
+                }
+                onKeyDown={(e) => e.key === "Enter" && handleSendEmail()}
+                placeholder="client@example.com"
+                className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition"
+                autoFocus
+              />
+            </div>
             {sendError && (
               <p className="text-sm text-red-600 mb-3">{sendError}</p>
             )}
             <div className="flex gap-2 justify-end">
               <button
                 onClick={() => setEmailModal(null)}
-                className="rounded-lg px-4 py-2 text-sm text-gray-500 hover:text-gray-700 transition-colors"
+                className="rounded-xl px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 Cancel
               </button>
               <button
                 onClick={handleSendEmail}
                 disabled={sendingId === emailModal.id}
-                className="rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+                className="rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-medium px-4 py-2 transition-colors disabled:opacity-60"
               >
                 {sendingId === emailModal.id
                   ? "Sending…"
                   : emailModal.alreadySent
                     ? "Resend"
-                    : "Send"}
+                    : "Send Invoice"}
               </button>
             </div>
           </div>

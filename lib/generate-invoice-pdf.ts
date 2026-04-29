@@ -106,7 +106,7 @@ function buildInvoiceHtml(invoice: InvoiceRecord): string {
       <div class="w-72 shrink-0">
         <div class="text-right text-4xl font-light tracking-wide text-slate-900">${documentTitle}</div>
         <div class="mt-5 space-y-2 text-sm">
-          ${safeInvoiceNumber ? `<div class="flex items-baseline justify-between gap-6"><span class="font-semibold text-slate-500">#</span><span class="text-right text-slate-800">${escapeHtml(safeInvoiceNumber)}</span></div>` : ""}
+          ${safeInvoiceNumber ? `<div class="flex items-baseline justify-between gap-6"><span class="font-semibold text-slate-500">Invoice No.</span><span class="text-right text-slate-800">#${escapeHtml(safeInvoiceNumber)}</span></div>` : ""}
           ${invoice.invoice_date ? `<div class="flex items-baseline justify-between gap-6"><span class="font-semibold text-slate-500">Date</span><span class="text-right text-slate-800">${escapeHtml(invoice.invoice_date)}</span></div>` : ""}
           ${invoice.due_date ? `<div class="flex items-baseline justify-between gap-6"><span class="font-semibold text-slate-500">Due Date</span><span class="text-right text-slate-800">${escapeHtml(invoice.due_date)}</span></div>` : ""}
         </div>
