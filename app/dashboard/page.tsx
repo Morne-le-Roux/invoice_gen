@@ -87,7 +87,7 @@ function calcTotal(record: InvoiceRecord): number {
 export default function DashboardPage() {
   const { user, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
-  const [invoices, setInvoices] = useState<RecordModel[]>([]);
+  const [invoices, setInvoices] = useState<InvoiceRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [clients, setClients] = useState<Map<string, ClientRecord>>(new Map());
@@ -131,7 +131,7 @@ export default function DashboardPage() {
           })
           .catch(() => [] as RecordModel[]),
       ]);
-      setInvoices(records);
+      setInvoices(records as unknown as InvoiceRecord[]);
       const map = new Map<string, ClientRecord>();
       for (const c of clientRecords) {
         if (c.id) map.set(c.id, c as unknown as ClientRecord);
@@ -214,9 +214,7 @@ export default function DashboardPage() {
     setSendingId(emailModal.id);
     setSendError("");
     try {
-      const pdfBase64 = await generateInvoicePdfBase64(
-        invoice as InvoiceRecord,
-      );
+      const pdfBase64 = await generateInvoicePdfBase64(invoice);
       const res = await fetch("/api/send-invoice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
