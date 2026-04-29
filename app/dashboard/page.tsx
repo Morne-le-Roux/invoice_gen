@@ -582,7 +582,7 @@ export default function DashboardPage() {
                           value={rec.document_type}
                           onChange={(e) =>
                             handleDocTypeChange(
-                              r.id,
+                              r.id!,
                               e.target.value as DocumentType,
                             )
                           }
