@@ -1,6 +1,7 @@
 import type { InvoiceRecord } from "@/types/invoice";
 import type { RecurringFrequency, RecurringRecord } from "@/types/recurring";
 import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
+import { getSmtp2goSender } from "@/lib/smtp2go";
 import PocketBase from "pocketbase";
 
 export type RecurringRunResult = {
@@ -115,11 +116,9 @@ export async function runRecurringInvoices(): Promise<{
 
   const successCount = results.filter((r) => r.invoiceId).length;
 
-  if (
-    successCount > 0 &&
-    process.env.SMTP2GO_API_KEY &&
-    process.env.SMTP2GO_SENDER
-  ) {
+  const sender = getSmtp2goSender();
+
+  if (successCount > 0 && process.env.SMTP2GO_API_KEY && sender) {
     const projectUrl = "https://invoice.disnetdev.co.za";
     const subject =
       successCount === 1
@@ -155,7 +154,7 @@ export async function runRecurringInvoices(): Promise<{
       body: JSON.stringify({
         api_key: process.env.SMTP2GO_API_KEY,
         to: ["morne@disnetdev.co.za"],
-        sender: process.env.SMTP2GO_SENDER,
+        sender,
         subject,
         html_body: html,
         text_body: text,

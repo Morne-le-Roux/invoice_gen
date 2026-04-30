@@ -230,6 +230,10 @@ export default function DashboardPage() {
   }
 
   async function handleSendEmail() {
+    await handleSendEmailVariant("standard");
+  }
+
+  async function handleSendEmailVariant(emailType: "standard" | "late") {
     if (!emailModal) return;
     const email = emailModal.email.trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -245,7 +249,12 @@ export default function DashboardPage() {
       const res = await fetch("/api/send-invoice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice, recipientEmail: email, pdfBase64 }),
+        body: JSON.stringify({
+          invoice,
+          recipientEmail: email,
+          pdfBase64,
+          emailType,
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to send email.");
@@ -746,7 +755,9 @@ export default function DashboardPage() {
                     m ? { ...m, email: e.target.value } : m,
                   )
                 }
-                onKeyDown={(e) => e.key === "Enter" && handleSendEmail()}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && handleSendEmailVariant("standard")
+                }
                 placeholder="client@example.com"
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition"
                 autoFocus
@@ -761,6 +772,13 @@ export default function DashboardPage() {
                 className="rounded-xl px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => handleSendEmailVariant("late")}
+                disabled={sendingId === emailModal.id}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
+              >
+                {sendingId === emailModal.id ? "Sending…" : "Send Late Notice"}
               </button>
               <button
                 onClick={handleSendEmail}

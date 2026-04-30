@@ -1,3 +1,4 @@
+import { getSmtp2goSender } from "@/lib/smtp2go";
 import type { InvoiceRecord } from "@/types/invoice";
 import { NextResponse } from "next/server";
 
@@ -10,17 +11,32 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;");
 }
 
-function buildEmailHtml(invoice: InvoiceRecord): string {
-  const documentTitle =
-    invoice.document_type === "quote"
-      ? "quote"
-      : invoice.document_type === "proforma"
-        ? "proforma invoice"
-        : "invoice";
+type EmailType = "standard" | "late";
+
+function getDocumentTitle(invoice: InvoiceRecord): string {
+  return invoice.document_type === "quote"
+    ? "quote"
+    : invoice.document_type === "proforma"
+      ? "proforma invoice"
+      : "invoice";
+}
+
+function buildEmailHtml(invoice: InvoiceRecord, emailType: EmailType): string {
+  const documentTitle = getDocumentTitle(invoice);
 
   const recipientName = invoice.bill_to
     ? escapeHtml(invoice.bill_to.split("\n")[0].trim())
     : "there";
+
+  const introParagraph =
+    emailType === "late"
+      ? `This is a reminder that ${documentTitle} (<strong>#${escapeHtml(invoice.invoice_number)}</strong>) is now overdue. Please find a copy attached for reference.`
+      : `Thank you for your business. Please find your ${documentTitle} (<strong>#${escapeHtml(invoice.invoice_number)}</strong>) attached to this email.`;
+
+  const followUpParagraph =
+    emailType === "late"
+      ? "If payment is not received within the next 5 days, services might be cut off. If payment has already been made, please disregard this message."
+      : `If you have any questions regarding this ${documentTitle}, please don't hesitate to get in touch.`;
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -37,10 +53,10 @@ function buildEmailHtml(invoice: InvoiceRecord): string {
     <div style="padding:36px 40px;">
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Hi ${recipientName},</p>
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
-        Thank you for your business. Please find your ${documentTitle} (<strong>#${escapeHtml(invoice.invoice_number)}</strong>) attached to this email.
+        ${introParagraph}
       </p>
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
-        If you have any questions regarding this ${documentTitle}, please don't hesitate to get in touch.
+        ${followUpParagraph}
       </p>
       <p style="margin:32px 0 0;font-size:15px;line-height:1.6;">
         Kind regards,<br>
@@ -54,7 +70,7 @@ function buildEmailHtml(invoice: InvoiceRecord): string {
 
 export async function POST(request: Request) {
   const apiKey = process.env.SMTP2GO_API_KEY;
-  const sender = process.env.SMTP2GO_SENDER;
+  const sender = getSmtp2goSender();
 
   if (!apiKey || !sender) {
     return NextResponse.json(
@@ -67,6 +83,7 @@ export async function POST(request: Request) {
     invoice: InvoiceRecord;
     recipientEmail: string;
     pdfBase64?: string;
+    emailType?: EmailType;
   };
   try {
     body = await request.json();
@@ -77,7 +94,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const { invoice, recipientEmail, pdfBase64 } = body;
+  const { invoice, recipientEmail, pdfBase64, emailType = "standard" } = body;
 
   if (!recipientEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(recipientEmail)) {
     return NextResponse.json(
@@ -91,6 +108,10 @@ export async function POST(request: Request) {
       { error: "Invalid invoice data." },
       { status: 400 },
     );
+  }
+
+  if (emailType !== "standard" && emailType !== "late") {
+    return NextResponse.json({ error: "Invalid email type." }, { status: 400 });
   }
 
   const documentTitle =
@@ -111,13 +132,14 @@ export async function POST(request: Request) {
     .replace(/[^a-zA-Z0-9-_]/g, "-");
   const attachmentFilename = `${filePrefix}-${safeFileName || filePrefix}.pdf`;
 
-  const htmlBody = buildEmailHtml(invoice);
+  const htmlBody = buildEmailHtml(invoice, emailType);
+  const subjectPrefix = emailType === "late" ? "Late Payment Notice: " : "";
 
   const smtp2goPayload: Record<string, unknown> = {
     api_key: apiKey,
     to: [recipientEmail],
     sender,
-    subject: `${documentTitle} #${invoice.invoice_number}`,
+    subject: `${subjectPrefix}${documentTitle} #${invoice.invoice_number}`,
     html_body: htmlBody,
   };
 
