@@ -70,7 +70,6 @@ export default function RecurringNewPage() {
   const [frequency, setFrequency] = useState<RecurringFrequency>("monthly");
   const [nextRunDate, setNextRunDate] = useState(defaultNextRun());
   const [active, setActive] = useState(true);
-  const [autoSend, setAutoSend] = useState(false);
 
   const { user, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
@@ -142,7 +141,6 @@ export default function RecurringNewPage() {
         setFrequency(record.frequency ?? "monthly");
         setNextRunDate(record.next_run_date ?? defaultNextRun());
         setActive(record.active !== false);
-        setAutoSend(record.auto_send === true);
         setSelectedClientId(record.client ?? null);
       })
       .catch((err) => console.error("Failed to load recurring invoice", err));
@@ -216,7 +214,6 @@ export default function RecurringNewPage() {
       frequency,
       next_run_date: nextRunDate,
       active,
-      auto_send: autoSend,
     };
 
     try {
@@ -250,7 +247,6 @@ export default function RecurringNewPage() {
     frequency,
     nextRunDate,
     active,
-    autoSend,
     router,
   ]);
 
@@ -398,33 +394,7 @@ export default function RecurringNewPage() {
                   />
                 </button>
               </div>
-
-              {/* Auto-send toggle */}
-              <div className="flex flex-col justify-end">
-                <label className="mb-1 block text-xs font-medium text-indigo-700">
-                  Auto-send email
-                </label>
-                <button
-                  type="button"
-                  onClick={() => setAutoSend((a) => !a)}
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${autoSend ? "bg-indigo-600" : "bg-slate-200"}`}
-                  aria-label={
-                    autoSend ? "Disable auto-send" : "Enable auto-send"
-                  }
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${autoSend ? "translate-x-6" : "translate-x-1"}`}
-                  />
-                </button>
-              </div>
             </div>
-            {autoSend && (
-              <p className="mt-3 text-xs text-indigo-600">
-                The invoice will be automatically emailed to the client on each
-                run date. Make sure a client with an email address is selected
-                below.
-              </p>
-            )}
           </div>
 
           {/* Invoice template */}

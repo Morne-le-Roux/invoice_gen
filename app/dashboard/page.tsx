@@ -93,6 +93,8 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Map<string, ClientRecord>>(new Map());
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendError, setSendError] = useState("");
+  const [previewDataUri, setPreviewDataUri] = useState<string | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [upcomingRecurring, setUpcomingRecurring] = useState<RecurringRecord[]>(
     [],
   );
@@ -200,6 +202,21 @@ export default function DashboardPage() {
       email,
       alreadySent: rec.status === "sent" || rec.status === "paid",
     });
+
+    // Generate PDF preview
+    setPreviewDataUri(null);
+    setPreviewLoading(true);
+    const invoice = invoices.find((r) => r.id === rec.id);
+    if (invoice) {
+      generateInvoicePdfBase64(invoice)
+        .then((base64) =>
+          setPreviewDataUri(`data:application/pdf;base64,${base64}`),
+        )
+        .catch(() => {})
+        .finally(() => setPreviewLoading(false));
+    } else {
+      setPreviewLoading(false);
+    }
   }
 
   async function handleSendEmail() {
@@ -681,9 +698,9 @@ export default function DashboardPage() {
 
       {/* Email send modal */}
       {emailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
-            <div className="mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[90vh]">
+            <div className="mb-4">
               <h2 className="text-base font-semibold text-slate-900">
                 {emailModal.alreadySent ? "Resend Invoice" : "Send Invoice"}
               </h2>
@@ -692,6 +709,28 @@ export default function DashboardPage() {
                   ? `Resend invoice #${emailModal.invoiceNumber} to client.`
                   : `Send invoice #${emailModal.invoiceNumber} to client.`}
               </p>
+            </div>
+
+            {/* PDF Preview */}
+            <div
+              className="mb-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex-1 min-h-0"
+              style={{ height: "28rem" }}
+            >
+              {previewLoading ? (
+                <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                  Generating preview…
+                </div>
+              ) : previewDataUri ? (
+                <iframe
+                  src={previewDataUri}
+                  className="w-full h-full"
+                  title="Invoice preview"
+                />
+              ) : (
+                <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                  Preview unavailable
+                </div>
+              )}
             </div>
             <div className="space-y-1 mb-4">
               <label className="block text-sm font-medium text-slate-700">
