@@ -1,5 +1,6 @@
 import type { InvoiceRecord } from "@/types/invoice";
 import type { RecurringFrequency, RecurringRecord } from "@/types/recurring";
+import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import PocketBase from "pocketbase";
 
 export type RecurringRunResult = {
@@ -78,7 +79,7 @@ export async function runRecurringInvoices(): Promise<{
         user: rec.user,
         document_type: rec.document_type,
         invoice_number: invoiceNumber,
-        from_details: rec.from_details,
+        from_details: COMPANY_FROM_DETAILS,
         bill_to: rec.bill_to,
         ship_to: rec.ship_to,
         invoice_date: invoiceDate,

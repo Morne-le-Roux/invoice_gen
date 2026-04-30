@@ -1,5 +1,6 @@
 "use client";
 
+import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import { useAuth } from "@/context/AuthContext";
 import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
@@ -17,10 +18,6 @@ type InvoiceItem = {
 
 type DocumentType = "invoice" | "quote" | "proforma";
 
-const STORAGE_KEYS = {
-  from: "invoice_gen.from",
-} as const;
-
 const formatCurrency = (value: number) =>
   new Intl.NumberFormat("en-ZA", {
     style: "currency",
@@ -36,7 +33,6 @@ function defaultNextRun(): string {
 }
 
 export default function RecurringNewPage() {
-  const hasRestoredFromStorage = useRef(false);
   const selectedClientIdRef = useRef<string | null>(null);
 
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -45,7 +41,6 @@ export default function RecurringNewPage() {
 
   // Invoice template fields
   const [documentType, setDocumentType] = useState<DocumentType>("invoice");
-  const [from, setFrom] = useState("");
   const [billTo, setBillTo] = useState("");
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
@@ -73,35 +68,13 @@ export default function RecurringNewPage() {
 
   const { user, isLoading: authLoading, logout } = useAuth();
   const router = useRouter();
+  const from = COMPANY_FROM_DETAILS;
 
   selectedClientIdRef.current = selectedClientId;
 
   useEffect(() => {
     if (!authLoading && !user) router.push("/login");
   }, [user, authLoading, router]);
-
-  // Restore 'from' from localStorage
-  useEffect(() => {
-    if (hasRestoredFromStorage.current) return;
-    try {
-      const stored = localStorage.getItem(STORAGE_KEYS.from);
-      if (stored) setFrom(stored);
-    } catch {
-      // ignore
-    } finally {
-      hasRestoredFromStorage.current = true;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hasRestoredFromStorage.current) return;
-    try {
-      if (from) localStorage.setItem(STORAGE_KEYS.from, from);
-      else localStorage.removeItem(STORAGE_KEYS.from);
-    } catch {
-      // ignore
-    }
-  }, [from]);
 
   // Load clients
   useEffect(() => {
@@ -129,7 +102,6 @@ export default function RecurringNewPage() {
       .then((record) => {
         setSavedId(record.id);
         setDocumentType(record.document_type ?? "invoice");
-        setFrom(record.from_details ?? "");
         setBillTo(record.bill_to ?? "");
         setNotes(record.notes ?? "");
         setTerms(record.terms ?? "");
@@ -407,10 +379,9 @@ export default function RecurringNewPage() {
                 </label>
                 <textarea
                   value={from}
-                  onChange={(e) => setFrom(e.target.value)}
-                  placeholder="Business name, address, contact"
-                  rows={3}
-                  className="mb-5 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
+                  readOnly
+                  rows={4}
+                  className="mb-5 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700 outline-none"
                 />
 
                 <div>

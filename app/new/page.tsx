@@ -1,5 +1,6 @@
 "use client";
 
+import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import { useAuth } from "@/context/AuthContext";
 import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
@@ -19,10 +20,6 @@ type InvoiceItem = {
 };
 
 type DocumentType = "invoice" | "quote" | "proforma";
-
-const STORAGE_KEYS = {
-  from: "invoice_gen.from",
-} as const;
 
 const toDocumentPrefix = (value: string) => {
   const lettersOnly = value
@@ -58,12 +55,10 @@ const formatCurrency = (value: number) =>
 export default function Home() {
   const invoiceRef = useRef<HTMLDivElement>(null);
   const exportInvoiceRef = useRef<HTMLDivElement>(null);
-  const hasRestoredFromStorage = useRef(false);
 
   const [documentType, setDocumentType] = useState<DocumentType>("invoice");
   const [invoiceNumber, setInvoiceNumber] = useState("1");
   const [isInvoiceNumberAuto, setIsInvoiceNumberAuto] = useState(true);
-  const [from, setFrom] = useState("");
   const [billTo, setBillTo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [dueDate, setDueDate] = useState("");
@@ -112,6 +107,7 @@ export default function Home() {
   const total = Math.max(0, subtotal + tax - discount + shipping);
   const balanceDue = Math.max(0, total - amountPaid);
 
+  const from = COMPANY_FROM_DETAILS;
   const safeFrom = from.trim();
   const safeBillTo = billTo.trim();
   const safeInvoiceNumber = invoiceNumber.trim();
@@ -155,40 +151,6 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isInvoiceNumberAuto, prefixSource]);
 
-  useEffect(() => {
-    if (hasRestoredFromStorage.current) {
-      return;
-    }
-
-    try {
-      const storedFrom = localStorage.getItem(STORAGE_KEYS.from);
-
-      if (storedFrom) {
-        setFrom(storedFrom);
-      }
-    } catch {
-      // Ignore storage errors (e.g. blocked in privacy mode).
-    } finally {
-      hasRestoredFromStorage.current = true;
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!hasRestoredFromStorage.current) {
-      return;
-    }
-
-    try {
-      if (from) {
-        localStorage.setItem(STORAGE_KEYS.from, from);
-      } else {
-        localStorage.removeItem(STORAGE_KEYS.from);
-      }
-    } catch {
-      // Ignore storage errors.
-    }
-  }, [from]);
-
   // Load clients
   useEffect(() => {
     if (!user) return;
@@ -218,7 +180,6 @@ export default function Home() {
         setSavedId(record.id);
         setDocumentType(record.document_type);
         setInvoiceNumber(record.invoice_number ?? "");
-        setFrom(record.from_details ?? "");
         setBillTo(record.bill_to ?? "");
         setInvoiceDate(record.invoice_date ?? "");
         setDueDate(record.due_date ?? "");
@@ -600,10 +561,9 @@ export default function Home() {
                 </label>
                 <textarea
                   value={from}
-                  onChange={(event) => setFrom(event.target.value)}
-                  placeholder="Business name, address, contact"
-                  rows={3}
-                  className="mb-5 w-full rounded border border-slate-300 px-3 py-2 outline-none focus:border-slate-400"
+                  readOnly
+                  rows={4}
+                  className="mb-5 w-full rounded border border-slate-300 bg-slate-50 px-3 py-2 text-slate-700 outline-none"
                 />
 
                 <div>

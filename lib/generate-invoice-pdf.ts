@@ -2,6 +2,7 @@
 
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
+import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import type { InvoiceRecord } from "@/types/invoice";
 
 function formatCurrency(value: number): string {
@@ -22,7 +23,7 @@ function escapeHtml(str: string): string {
 }
 
 function buildInvoiceHtml(invoice: InvoiceRecord): string {
-  const safeFrom = (invoice.from_details ?? "").trim();
+  const safeFrom = COMPANY_FROM_DETAILS.trim();
   const safeBillTo = (invoice.bill_to ?? "").trim();
   const safeInvoiceNumber = (invoice.invoice_number ?? "").trim();
   const safeNotes = (invoice.notes ?? "").trim();
