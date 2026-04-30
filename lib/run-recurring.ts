@@ -119,6 +119,7 @@ export async function runRecurringInvoices(): Promise<{
     process.env.SMTP2GO_API_KEY &&
     process.env.SMTP2GO_SENDER
   ) {
+    const projectUrl = "https://invoice.disnetdev.co.za";
     const subject =
       successCount === 1
         ? "1 new recurring invoice is ready to send"
@@ -136,11 +137,16 @@ export async function runRecurringInvoices(): Promise<{
       <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">
         ${successCount === 1 ? "1 new recurring invoice has" : `${successCount} new recurring invoices have`} been generated and are ready to be sent.
       </p>
-      <p style="margin:0;font-size:15px;line-height:1.6;">Log in to review and send them.</p>
+      <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Log in to review and send them.</p>
+      <p style="margin:0;font-size:15px;line-height:1.6;">
+        <a href="${projectUrl}" style="color:#2563eb;text-decoration:none;font-weight:600;">Open Invoice Generator</a>
+      </p>
     </div>
   </div>
 </body>
 </html>`;
+
+    const text = `${successCount === 1 ? "1 new recurring invoice has" : `${successCount} new recurring invoices have`} been generated and are ready to be sent.\n\nLog in to review and send them:\n${projectUrl}`;
 
     await fetch("https://api.smtp2go.com/v3/email/send", {
       method: "POST",
@@ -151,6 +157,7 @@ export async function runRecurringInvoices(): Promise<{
         sender: process.env.SMTP2GO_SENDER,
         subject,
         html_body: html,
+        text_body: text,
       }),
     });
   }

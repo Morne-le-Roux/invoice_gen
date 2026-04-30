@@ -1,12 +1,16 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { generateInvoicePdfBase64 } from "@/lib/generate-invoice-pdf";
+import {
+  generateInvoicePdfBase64,
+  generateInvoicePreviewDataUri,
+} from "@/lib/generate-invoice-pdf";
 import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
 import type { InvoiceRecord, InvoiceStatus } from "@/types/invoice";
 import type { DocumentType } from "@/types/invoice";
 import type { RecurringRecord } from "@/types/recurring";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { RecordModel } from "pocketbase";
@@ -94,6 +98,10 @@ export default function DashboardPage() {
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendError, setSendError] = useState("");
   const [previewDataUri, setPreviewDataUri] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [upcomingRecurring, setUpcomingRecurring] = useState<RecurringRecord[]>(
     [],
@@ -205,13 +213,15 @@ export default function DashboardPage() {
 
     // Generate PDF preview
     setPreviewDataUri(null);
+    setPreviewSize(null);
     setPreviewLoading(true);
     const invoice = invoices.find((r) => r.id === rec.id);
     if (invoice) {
-      generateInvoicePdfBase64(invoice)
-        .then((base64) =>
-          setPreviewDataUri(`data:application/pdf;base64,${base64}`),
-        )
+      generateInvoicePreviewDataUri(invoice)
+        .then(({ dataUri, width, height }) => {
+          setPreviewDataUri(dataUri);
+          setPreviewSize({ width, height });
+        })
         .catch(() => {})
         .finally(() => setPreviewLoading(false));
     } else {
@@ -401,9 +411,6 @@ export default function DashboardPage() {
                     <th className="px-5 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       Amount
                     </th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                      Auto-send
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -478,17 +485,6 @@ export default function DashboardPage() {
                         <td className="px-5 py-3 text-right">
                           <span className="font-semibold text-slate-800">
                             {formatCurrency(total)}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              rec.auto_send
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {rec.auto_send ? "Yes" : "No"}
                           </span>
                         </td>
                       </tr>
@@ -699,7 +695,7 @@ export default function DashboardPage() {
       {/* Email send modal */}
       {emailModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[90vh]">
+          <div className="w-full max-w-6xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[95vh]">
             <div className="mb-4">
               <h2 className="text-base font-semibold text-slate-900">
                 {emailModal.alreadySent ? "Resend Invoice" : "Send Invoice"}
@@ -713,19 +709,25 @@ export default function DashboardPage() {
 
             {/* PDF Preview */}
             <div
-              className="mb-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex-1 min-h-0"
-              style={{ height: "36rem" }}
+              className="mb-4 rounded-xl overflow-auto border border-slate-200 bg-slate-50 flex-1 min-h-0"
+              style={{ height: "72vh", minHeight: "32rem" }}
             >
               {previewLoading ? (
                 <div className="h-full flex items-center justify-center text-sm text-slate-400">
                   Generating preview…
                 </div>
               ) : previewDataUri ? (
-                <iframe
-                  src={previewDataUri}
-                  className="w-full h-full"
-                  title="Invoice preview"
-                />
+                <div className="flex min-h-full items-start justify-center p-4">
+                  <Image
+                    src={previewDataUri}
+                    alt="Invoice preview"
+                    width={previewSize?.width ?? 794}
+                    height={previewSize?.height ?? 1123}
+                    unoptimized
+                    sizes="(max-width: 1024px) 100vw, 1200px"
+                    className="block h-auto w-full rounded-lg bg-white shadow-sm"
+                  />
+                </div>
               ) : (
                 <div className="h-full flex items-center justify-center text-sm text-slate-400">
                   Preview unavailable
