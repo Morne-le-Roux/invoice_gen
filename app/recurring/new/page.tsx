@@ -214,6 +214,7 @@ export default function RecurringNewPage() {
       frequency,
       next_run_date: nextRunDate,
       active,
+      auto_send: false,
     };
 
     try {
