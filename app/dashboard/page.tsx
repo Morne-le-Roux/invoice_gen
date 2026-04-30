@@ -714,7 +714,7 @@ export default function DashboardPage() {
             {/* PDF Preview */}
             <div
               className="mb-4 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex-1 min-h-0"
-              style={{ height: "28rem" }}
+              style={{ height: "36rem" }}
             >
               {previewLoading ? (
                 <div className="h-full flex items-center justify-center text-sm text-slate-400">
