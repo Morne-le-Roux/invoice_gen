@@ -1,12 +1,16 @@
 "use client";
 
 import { useAuth } from "@/context/AuthContext";
-import { generateInvoicePdfBase64 } from "@/lib/generate-invoice-pdf";
+import {
+  generateInvoicePdfBase64,
+  generateInvoicePreviewDataUri,
+} from "@/lib/generate-invoice-pdf";
 import pb from "@/lib/pocketbase";
 import type { ClientRecord } from "@/types/client";
 import type { InvoiceRecord, InvoiceStatus } from "@/types/invoice";
 import type { DocumentType } from "@/types/invoice";
 import type { RecurringRecord } from "@/types/recurring";
+import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { RecordModel } from "pocketbase";
@@ -93,6 +97,12 @@ export default function DashboardPage() {
   const [clients, setClients] = useState<Map<string, ClientRecord>>(new Map());
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [sendError, setSendError] = useState("");
+  const [previewDataUri, setPreviewDataUri] = useState<string | null>(null);
+  const [previewSize, setPreviewSize] = useState<{
+    width: number;
+    height: number;
+  } | null>(null);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [upcomingRecurring, setUpcomingRecurring] = useState<RecurringRecord[]>(
     [],
   );
@@ -200,9 +210,30 @@ export default function DashboardPage() {
       email,
       alreadySent: rec.status === "sent" || rec.status === "paid",
     });
+
+    // Generate PDF preview
+    setPreviewDataUri(null);
+    setPreviewSize(null);
+    setPreviewLoading(true);
+    const invoice = invoices.find((r) => r.id === rec.id);
+    if (invoice) {
+      generateInvoicePreviewDataUri(invoice)
+        .then(({ dataUri, width, height }) => {
+          setPreviewDataUri(dataUri);
+          setPreviewSize({ width, height });
+        })
+        .catch(() => {})
+        .finally(() => setPreviewLoading(false));
+    } else {
+      setPreviewLoading(false);
+    }
   }
 
   async function handleSendEmail() {
+    await handleSendEmailVariant("standard");
+  }
+
+  async function handleSendEmailVariant(emailType: "standard" | "late") {
     if (!emailModal) return;
     const email = emailModal.email.trim();
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -218,7 +249,12 @@ export default function DashboardPage() {
       const res = await fetch("/api/send-invoice", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ invoice, recipientEmail: email, pdfBase64 }),
+        body: JSON.stringify({
+          invoice,
+          recipientEmail: email,
+          pdfBase64,
+          emailType,
+        }),
       });
       const data = (await res.json()) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Failed to send email.");
@@ -384,9 +420,6 @@ export default function DashboardPage() {
                     <th className="px-5 py-3 text-right text-xs font-semibold text-slate-400 uppercase tracking-wide">
                       Amount
                     </th>
-                    <th className="px-5 py-3 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                      Auto-send
-                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -461,17 +494,6 @@ export default function DashboardPage() {
                         <td className="px-5 py-3 text-right">
                           <span className="font-semibold text-slate-800">
                             {formatCurrency(total)}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3">
-                          <span
-                            className={`text-xs font-medium px-2 py-0.5 rounded-full ${
-                              rec.auto_send
-                                ? "bg-emerald-100 text-emerald-700"
-                                : "bg-slate-100 text-slate-500"
-                            }`}
-                          >
-                            {rec.auto_send ? "Yes" : "No"}
                           </span>
                         </td>
                       </tr>
@@ -681,9 +703,9 @@ export default function DashboardPage() {
 
       {/* Email send modal */}
       {emailModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5">
-            <div className="mb-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+          <div className="w-full max-w-6xl rounded-2xl bg-white p-6 shadow-2xl ring-1 ring-black/5 flex flex-col max-h-[95vh]">
+            <div className="mb-4">
               <h2 className="text-base font-semibold text-slate-900">
                 {emailModal.alreadySent ? "Resend Invoice" : "Send Invoice"}
               </h2>
@@ -692,6 +714,34 @@ export default function DashboardPage() {
                   ? `Resend invoice #${emailModal.invoiceNumber} to client.`
                   : `Send invoice #${emailModal.invoiceNumber} to client.`}
               </p>
+            </div>
+
+            {/* PDF Preview */}
+            <div
+              className="mb-4 rounded-xl overflow-auto border border-slate-200 bg-slate-50 flex-1 min-h-0"
+              style={{ height: "72vh", minHeight: "32rem" }}
+            >
+              {previewLoading ? (
+                <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                  Generating preview…
+                </div>
+              ) : previewDataUri ? (
+                <div className="flex min-h-full items-start justify-center p-4">
+                  <Image
+                    src={previewDataUri}
+                    alt="Invoice preview"
+                    width={previewSize?.width ?? 794}
+                    height={previewSize?.height ?? 1123}
+                    unoptimized
+                    sizes="(max-width: 1024px) 100vw, 1200px"
+                    className="block h-auto w-full rounded-lg bg-white shadow-sm"
+                  />
+                </div>
+              ) : (
+                <div className="h-full flex items-center justify-center text-sm text-slate-400">
+                  Preview unavailable
+                </div>
+              )}
             </div>
             <div className="space-y-1 mb-4">
               <label className="block text-sm font-medium text-slate-700">
@@ -705,7 +755,9 @@ export default function DashboardPage() {
                     m ? { ...m, email: e.target.value } : m,
                   )
                 }
-                onKeyDown={(e) => e.key === "Enter" && handleSendEmail()}
+                onKeyDown={(e) =>
+                  e.key === "Enter" && handleSendEmailVariant("standard")
+                }
                 placeholder="client@example.com"
                 className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition"
                 autoFocus
@@ -720,6 +772,13 @@ export default function DashboardPage() {
                 className="rounded-xl px-4 py-2 text-sm text-slate-500 hover:text-slate-700 hover:bg-slate-50 transition-colors"
               >
                 Cancel
+              </button>
+              <button
+                onClick={() => handleSendEmailVariant("late")}
+                disabled={sendingId === emailModal.id}
+                className="rounded-xl border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-900 transition-colors hover:bg-amber-100 disabled:opacity-60"
+              >
+                {sendingId === emailModal.id ? "Sending…" : "Send Late Notice"}
               </button>
               <button
                 onClick={handleSendEmail}

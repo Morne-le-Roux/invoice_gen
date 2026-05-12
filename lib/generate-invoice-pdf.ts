@@ -2,6 +2,7 @@
 
 import { toPng } from "html-to-image";
 import { jsPDF } from "jspdf";
+import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import type { InvoiceRecord } from "@/types/invoice";
 
 function formatCurrency(value: number): string {
@@ -22,7 +23,7 @@ function escapeHtml(str: string): string {
 }
 
 function buildInvoiceHtml(invoice: InvoiceRecord): string {
-  const safeFrom = (invoice.from_details ?? "").trim();
+  const safeFrom = COMPANY_FROM_DETAILS.trim();
   const safeBillTo = (invoice.bill_to ?? "").trim();
   const safeInvoiceNumber = (invoice.invoice_number ?? "").trim();
   const safeNotes = (invoice.notes ?? "").trim();
@@ -140,13 +141,11 @@ function buildInvoiceHtml(invoice: InvoiceRecord): string {
   </div>`;
 }
 
-/**
- * Generates a PDF of the given invoice and returns it as a base64-encoded string.
- * Must be called in a browser context.
- */
-export async function generateInvoicePdfBase64(
-  invoice: InvoiceRecord,
-): Promise<string> {
+async function renderInvoiceImage(invoice: InvoiceRecord): Promise<{
+  imageData: string;
+  nodeWidth: number;
+  nodeHeight: number;
+}> {
   const container = document.createElement("div");
   container.style.position = "absolute";
   container.style.left = "-100000px";
@@ -159,7 +158,7 @@ export async function generateInvoicePdfBase64(
     const node = container.firstElementChild as HTMLElement;
     if (!node) throw new Error("Failed to build invoice element.");
 
-    // Allow images to load before capturing
+    // Allow images to load before capturing.
     await new Promise<void>((resolve) => setTimeout(resolve, 300));
 
     const rect = node.getBoundingClientRect();
@@ -201,57 +200,82 @@ export async function generateInvoicePdfBase64(
       },
     });
 
-    const pdf = new jsPDF({
-      orientation: "portrait",
-      unit: "mm",
-      format: "a4",
-    });
-    const pageWidth = pdf.internal.pageSize.getWidth();
-    const pageHeight = pdf.internal.pageSize.getHeight();
-    const PDF_MARGIN_MM = 10;
-    const contentWidth = Math.max(0, pageWidth - PDF_MARGIN_MM * 2);
-    const contentHeight = Math.max(0, pageHeight - PDF_MARGIN_MM * 2);
+    return { imageData, nodeWidth, nodeHeight };
+  } finally {
+    if (document.body.contains(container)) {
+      document.body.removeChild(container);
+    }
+  }
+}
 
-    const imageWidth = contentWidth;
-    const imageHeight = (nodeHeight * imageWidth) / nodeWidth;
+export async function generateInvoicePreviewDataUri(
+  invoice: InvoiceRecord,
+): Promise<{ dataUri: string; width: number; height: number }> {
+  const { imageData, nodeWidth, nodeHeight } =
+    await renderInvoiceImage(invoice);
+  return {
+    dataUri: imageData,
+    width: nodeWidth,
+    height: nodeHeight,
+  };
+}
 
-    let remainingHeight = imageHeight;
-    let position = PDF_MARGIN_MM;
+/**
+ * Generates a PDF of the given invoice and returns it as a base64-encoded string.
+ * Must be called in a browser context.
+ */
+export async function generateInvoicePdfBase64(
+  invoice: InvoiceRecord,
+): Promise<string> {
+  const { imageData, nodeWidth, nodeHeight } =
+    await renderInvoiceImage(invoice);
 
+  const pdf = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: "a4",
+  });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const PDF_MARGIN_MM = 10;
+  const contentWidth = Math.max(0, pageWidth - PDF_MARGIN_MM * 2);
+  const contentHeight = Math.max(0, pageHeight - PDF_MARGIN_MM * 2);
+
+  const imageWidth = contentWidth;
+  const imageHeight = (nodeHeight * imageWidth) / nodeWidth;
+
+  let remainingHeight = imageHeight;
+  let position = PDF_MARGIN_MM;
+
+  pdf.addImage(
+    imageData,
+    "PNG",
+    PDF_MARGIN_MM,
+    PDF_MARGIN_MM,
+    imageWidth,
+    imageHeight,
+    undefined,
+    "FAST",
+  );
+  remainingHeight -= contentHeight;
+
+  while (remainingHeight > 0) {
+    position = PDF_MARGIN_MM + (remainingHeight - imageHeight);
+    pdf.addPage();
     pdf.addImage(
       imageData,
       "PNG",
       PDF_MARGIN_MM,
-      PDF_MARGIN_MM,
+      position,
       imageWidth,
       imageHeight,
       undefined,
       "FAST",
     );
     remainingHeight -= contentHeight;
-
-    while (remainingHeight > 0) {
-      position = PDF_MARGIN_MM + (remainingHeight - imageHeight);
-      pdf.addPage();
-      pdf.addImage(
-        imageData,
-        "PNG",
-        PDF_MARGIN_MM,
-        position,
-        imageWidth,
-        imageHeight,
-        undefined,
-        "FAST",
-      );
-      remainingHeight -= contentHeight;
-    }
-
-    // Return pure base64 (strip the "data:application/pdf;base64," prefix)
-    const dataUri = pdf.output("datauristring");
-    return dataUri.split(",")[1] ?? dataUri;
-  } finally {
-    if (document.body.contains(container)) {
-      document.body.removeChild(container);
-    }
   }
+
+  // Return pure base64 (strip the "data:application/pdf;base64," prefix)
+  const dataUri = pdf.output("datauristring");
+  return dataUri.split(",")[1] ?? dataUri;
 }

@@ -236,9 +236,6 @@ export default function RecurringPage() {
                     Amount
                   </th>
                   <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
-                    Auto-send
-                  </th>
-                  <th className="px-5 py-3.5 text-left text-xs font-semibold text-slate-400 uppercase tracking-wide">
                     Active
                   </th>
                   <th className="px-5 py-3.5" />
@@ -288,17 +285,6 @@ export default function RecurringPage() {
                         <span className="font-semibold text-slate-800">
                           {formatCurrency(calcTotal(rec))}
                         </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        {rec.auto_send ? (
-                          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700">
-                            Yes
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-500">
-                            No
-                          </span>
-                        )}
                       </td>
                       <td className="px-5 py-3.5">
                         <button
