@@ -60,6 +60,7 @@ type AddServiceForm = {
   price: string;
   charge_type: ChargeType;
   notes: string;
+  end_date: string;
 };
 
 const EMPTY_ADD: AddServiceForm = {
@@ -67,6 +68,7 @@ const EMPTY_ADD: AddServiceForm = {
   price: "",
   charge_type: "monthly",
   notes: "",
+  end_date: "",
 };
 
 export default function ClientDetailPage() {
@@ -219,6 +221,7 @@ export default function ClientDetailPage() {
         charge_type: addForm.charge_type,
         active: true,
         notes: addForm.notes.trim(),
+        end_date: addForm.end_date || null,
       });
       // Refetch to get expand
       const withExpand = await pb
@@ -243,6 +246,7 @@ export default function ClientDetailPage() {
       price: String(cs.price),
       charge_type: cs.charge_type,
       notes: cs.notes ?? "",
+      end_date: cs.end_date ?? "",
     });
     setEditError("");
   }
@@ -261,6 +265,7 @@ export default function ClientDetailPage() {
         price,
         charge_type: editForm.charge_type,
         notes: editForm.notes.trim(),
+        end_date: editForm.end_date || null,
       });
       const withExpand = await pb
         .collection("client_services")
@@ -526,6 +531,9 @@ export default function ClientDetailPage() {
                     <th className="px-4 py-3 text-left font-medium text-slate-600">
                       Type
                     </th>
+                    <th className="px-4 py-3 text-left font-medium text-slate-600">
+                      End Date
+                    </th>
                     <th className="px-4 py-3 text-right font-medium text-slate-600">
                       Price
                     </th>
@@ -552,6 +560,26 @@ export default function ClientDetailPage() {
                         </td>
                         <td className="px-4 py-3 text-slate-500">
                           {cs.notes || "—"}
+                        </td>
+                        <td className="px-4 py-3">
+                          {cs.end_date ? (
+                            (() => {
+                              const today = new Date()
+                                .toISOString()
+                                .split("T")[0];
+                              const expired = cs.end_date <= today;
+                              return (
+                                <span
+                                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-medium ${expired ? "bg-rose-100 text-rose-700" : "bg-slate-100 text-slate-600"}`}
+                                >
+                                  {expired ? "Expired " : ""}
+                                  {cs.end_date as string}
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="text-slate-400">—</span>
+                          )}
                         </td>
                         <td className="px-4 py-3">
                           <span
@@ -776,6 +804,22 @@ export default function ClientDetailPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  End Date{" "}
+                  <span className="text-slate-400 font-normal">
+                    (optional — service auto-removed on this date)
+                  </span>
+                </label>
+                <input
+                  type="date"
+                  value={addForm.end_date}
+                  onChange={(e) =>
+                    setAddForm((f) => ({ ...f, end_date: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
               {addError && <p className="text-xs text-rose-600">{addError}</p>}
             </div>
             <div className="mt-6 flex justify-end gap-3">
@@ -849,6 +893,22 @@ export default function ClientDetailPage() {
                     setEditForm((f) => ({ ...f, notes: e.target.value }))
                   }
                   placeholder="Optional line item note"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  End Date{" "}
+                  <span className="text-slate-400 font-normal">
+                    (optional — service auto-removed on this date)
+                  </span>
+                </label>
+                <input
+                  type="date"
+                  value={editForm.end_date}
+                  onChange={(e) =>
+                    setEditForm((f) => ({ ...f, end_date: e.target.value }))
+                  }
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>

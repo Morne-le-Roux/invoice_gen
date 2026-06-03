@@ -58,6 +58,23 @@ export async function runRecurringInvoices(): Promise<{
 
   const today = new Date().toISOString().split("T")[0];
 
+  // Deactivate any client_services whose end_date has passed
+  try {
+    const expiredServices = await pb
+      .collection("client_services")
+      .getFullList({
+        filter: `active = true && end_date != "" && end_date <= "${today}"`,
+      });
+    await Promise.all(
+      expiredServices.map((cs) =>
+        pb.collection("client_services").update(cs.id, { active: false }),
+      ),
+    );
+  } catch {
+    // Non-fatal: log and continue
+    console.warn("Failed to deactivate expired client services.");
+  }
+
   const templates = await pb.collection("recurring_invoices").getFullList({
     filter: `active = true && next_run_date <= "${today}"`,
     expand: "client",

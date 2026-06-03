@@ -37,8 +37,30 @@ export async function generateClientInvoice(
     throw new Error("This client has no active services to invoice.");
   }
 
+  const today = new Date().toISOString().split("T")[0];
+
+  // Deactivate any services whose end_date has been reached
+  const expiredServices = clientServices.filter(
+    (cs) => cs.end_date && cs.end_date <= today,
+  );
+  await Promise.all(
+    expiredServices.map((cs) =>
+      pb.collection("client_services").update(cs.id!, { active: false }),
+    ),
+  );
+
+  const billableServices = clientServices.filter(
+    (cs) => !cs.end_date || cs.end_date > today,
+  );
+
+  if (billableServices.length === 0) {
+    throw new Error(
+      "All active services have expired. No services to invoice.",
+    );
+  }
+
   // Map to invoice line items
-  const items = clientServices.map((cs, idx) => {
+  const items = billableServices.map((cs, idx) => {
     const serviceName =
       cs.expand?.service?.name ?? cs.notes ?? `Service ${idx + 1}`;
     const description = [serviceName, cs.notes].filter(Boolean).join(" – ");
@@ -55,7 +77,6 @@ export async function generateClientInvoice(
     0,
   );
 
-  const today = new Date().toISOString().split("T")[0];
   const dueDate = new Date();
   dueDate.setDate(dueDate.getDate() + 30);
   const dueDateStr = dueDate.toISOString().split("T")[0];
@@ -92,7 +113,9 @@ export async function generateClientInvoice(
     .create<InvoiceRecord & { id: string }>(invoiceData);
 
   // Mark once_off services as inactive
-  const onceOffs = clientServices.filter((cs) => cs.charge_type === "once_off");
+  const onceOffs = billableServices.filter(
+    (cs) => cs.charge_type === "once_off",
+  );
   await Promise.all(
     onceOffs.map((cs) =>
       pb.collection("client_services").update(cs.id!, { active: false }),

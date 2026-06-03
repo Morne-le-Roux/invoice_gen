@@ -19,6 +19,7 @@ export type ClientServiceRecord = {
   charge_type: ChargeType;
   active: boolean;
   notes?: string;
+  end_date?: string;
   expand?: {
     service?: ServiceRecord;
   };
