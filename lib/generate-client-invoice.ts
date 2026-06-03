@@ -3,8 +3,6 @@ import type { ClientServiceRecord } from "@/types/service";
 import { COMPANY_FROM_DETAILS } from "@/lib/company-details";
 import PocketBase from "pocketbase";
 
-const TAX_RATE = 0.15;
-
 function buildInvoiceNumber(clientName: string): string {
   const letters = clientName
     .trim()
@@ -56,7 +54,6 @@ export async function generateClientInvoice(
     (sum, item) => sum + item.quantity * item.rate,
     0,
   );
-  const taxAmount = Math.round(subtotal * TAX_RATE * 100) / 100;
 
   const today = new Date().toISOString().split("T")[0];
   const dueDate = new Date();
@@ -78,7 +75,7 @@ export async function generateClientInvoice(
     due_date: dueDateStr,
     notes: "",
     terms: "",
-    tax: taxAmount,
+    tax: 0,
     discount: 0,
     shipping: 0,
     amount_paid: 0,

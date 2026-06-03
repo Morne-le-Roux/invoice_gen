@@ -20,14 +20,12 @@ type ServiceForm = {
   name: string;
   description: string;
   priceExcl: string;
-  priceIncl: string;
 };
 
 const EMPTY_FORM: ServiceForm = {
   name: "",
   description: "",
   priceExcl: "",
-  priceIncl: "",
 };
 
 export default function ServicesPage() {
@@ -84,7 +82,6 @@ export default function ServicesPage() {
       name: rec.name ?? "",
       description: rec.description ?? "",
       priceExcl: String(excl),
-      priceIncl: String(Math.round(excl * 1.15 * 100) / 100),
     });
     setSaveError("");
     setModalOpen(true);
@@ -318,57 +315,20 @@ export default function ServicesPage() {
                   className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                 />
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Price excl. VAT (ZAR)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.priceExcl}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      const excl = parseFloat(raw);
-                      const incl =
-                        raw !== "" && !isNaN(excl)
-                          ? String(Math.round(excl * 1.15 * 100) / 100)
-                          : "";
-                      setForm((f) => ({
-                        ...f,
-                        priceExcl: raw,
-                        priceIncl: incl,
-                      }));
-                    }}
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-600 mb-1">
-                    Price incl. VAT (ZAR)
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={form.priceIncl}
-                    onChange={(e) => {
-                      const raw = e.target.value;
-                      const incl = parseFloat(raw);
-                      const excl =
-                        raw !== "" && !isNaN(incl)
-                          ? String(Math.round((incl / 1.15) * 100) / 100)
-                          : "";
-                      setForm((f) => ({
-                        ...f,
-                        priceIncl: raw,
-                        priceExcl: excl,
-                      }));
-                    }}
-                    placeholder="0.00"
-                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-600 mb-1">
+                  Price (ZAR)
+                </label>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  value={form.priceExcl}
+                  onChange={(e) => {
+                    setForm((f) => ({ ...f, priceExcl: e.target.value }));
+                  }}
+                  placeholder="0.00"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm text-slate-900 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
               </div>
               {saveError && (
                 <p className="text-xs text-rose-600">{saveError}</p>

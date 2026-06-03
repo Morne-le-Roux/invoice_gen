@@ -343,8 +343,7 @@ export default function ClientDetailPage() {
     (sum, cs) => sum + (cs.price as number),
     0,
   );
-  const tax = Math.round(subtotal * 0.15 * 100) / 100;
-  const total = subtotal + tax;
+  const total = subtotal;
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -486,10 +485,6 @@ export default function ClientDetailPage() {
               <div className="flex justify-between text-slate-500 pt-2 border-t border-slate-100">
                 <span>Subtotal</span>
                 <span className="font-mono">{formatCurrency(subtotal)}</span>
-              </div>
-              <div className="flex justify-between text-slate-500">
-                <span>VAT (15%)</span>
-                <span className="font-mono">{formatCurrency(tax)}</span>
               </div>
               <div className="flex justify-between font-semibold text-slate-900 pt-1 border-t border-slate-200">
                 <span>Total</span>
@@ -736,7 +731,7 @@ export default function ClientDetailPage() {
               </div>
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Price (ZAR, excl. VAT) *
+                  Price (ZAR) *
                 </label>
                 <input
                   type="text"
@@ -812,7 +807,7 @@ export default function ClientDetailPage() {
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-medium text-slate-600 mb-1">
-                  Price (ZAR, excl. VAT) *
+                  Price (ZAR) *
                 </label>
                 <input
                   type="text"
