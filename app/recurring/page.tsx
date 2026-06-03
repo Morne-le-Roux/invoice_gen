@@ -158,9 +158,12 @@ export default function RecurringPage() {
                 >
                   Clients
                 </Link>
-                <span className="px-3 py-1.5 rounded-md text-sm font-medium text-white bg-white/10">
-                  Recurring
-                </span>
+                <Link
+                  href="/services"
+                  className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                >
+                  Services
+                </Link>
               </nav>
             </div>
             <div className="flex items-center gap-4">

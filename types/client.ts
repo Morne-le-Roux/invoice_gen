@@ -4,4 +4,5 @@ export type ClientRecord = {
   client_name: string;
   details: string;
   email: string;
+  billing_day?: number;
 };

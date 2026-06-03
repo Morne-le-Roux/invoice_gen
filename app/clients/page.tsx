@@ -36,10 +36,18 @@ function avatarColor(name: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length];
 }
 
-const EMPTY_FORM: Omit<ClientRecord, "id" | "user"> = {
+type ClientForm = {
+  client_name: string;
+  details: string;
+  email: string;
+  billing_day: string;
+};
+
+const EMPTY_FORM: ClientForm = {
   client_name: "",
   details: "",
   email: "",
+  billing_day: "",
 };
 
 export default function ClientsPage() {
@@ -52,7 +60,7 @@ export default function ClientsPage() {
   // Modal state
   const [modalOpen, setModalOpen] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [form, setForm] = useState<ClientForm>({ ...EMPTY_FORM });
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
 
@@ -97,6 +105,7 @@ export default function ClientsPage() {
       client_name: rec.client_name ?? "",
       details: rec.details ?? "",
       email: rec.email ?? "",
+      billing_day: rec.billing_day ? String(rec.billing_day) : "",
     });
     setSaveError("");
     setModalOpen(true);
@@ -116,6 +125,8 @@ export default function ClientsPage() {
         client_name: form.client_name.trim(),
         details: form.details,
         email: form.email.trim(),
+        billing_day:
+          form.billing_day !== "" ? parseInt(form.billing_day) || null : null,
       };
       if (editId) {
         const updated = await pb.collection("clients").update(editId, data);
@@ -180,10 +191,10 @@ export default function ClientsPage() {
                   Clients
                 </span>
                 <Link
-                  href="/recurring"
+                  href="/services"
                   className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
                 >
-                  Recurring
+                  Services
                 </Link>
               </nav>
             </div>
@@ -258,14 +269,17 @@ export default function ClientsPage() {
                   key={r.id}
                   className="rounded-2xl bg-white border border-slate-200 p-5 flex flex-col gap-4 hover:shadow-md transition-shadow"
                 >
-                  <div className="flex items-start gap-3">
+                  <Link
+                    href={`/clients/${r.id}`}
+                    className="flex items-start gap-3 group"
+                  >
                     <div
                       className={`w-10 h-10 rounded-full ${avatarBg} flex items-center justify-center text-white text-sm font-bold shrink-0`}
                     >
                       {initials}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="font-semibold text-slate-900 truncate">
+                      <p className="font-semibold text-slate-900 truncate group-hover:text-indigo-600 transition-colors">
                         {name || <span className="text-slate-300">—</span>}
                       </p>
                       {r.email ? (
@@ -277,14 +291,25 @@ export default function ClientsPage() {
                           No email
                         </p>
                       )}
+                      {r.billing_day && (
+                        <p className="text-xs text-slate-400 mt-0.5">
+                          Bills on day {r.billing_day}
+                        </p>
+                      )}
                     </div>
-                  </div>
+                  </Link>
                   {r.details && (
                     <p className="text-xs text-slate-500 whitespace-pre-wrap line-clamp-3 leading-relaxed border-t border-slate-100 pt-3">
                       {r.details}
                     </p>
                   )}
                   <div className="flex items-center gap-2 border-t border-slate-100 pt-3 mt-auto">
+                    <Link
+                      href={`/clients/${r.id}`}
+                      className="flex-1 inline-flex items-center justify-center rounded-lg bg-indigo-50 border border-indigo-100 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
+                    >
+                      View
+                    </Link>
                     <button
                       onClick={() => openEdit(r)}
                       className="flex-1 inline-flex items-center justify-center rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 transition-colors"
@@ -374,6 +399,27 @@ export default function ClientsPage() {
                 />
                 <p className="mt-1.5 text-xs text-slate-400">
                   This text fills the Bill To field on invoices.
+                </p>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                  Billing Day (1–28)
+                </label>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  value={form.billing_day}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      billing_day: e.target.value,
+                    }))
+                  }
+                  placeholder="e.g. 1"
+                  className="w-full rounded-xl border border-slate-200 px-3.5 py-2.5 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 transition"
+                />
+                <p className="mt-1.5 text-xs text-slate-400">
+                  Day of the month when invoices should be generated.
                 </p>
               </div>
             </div>

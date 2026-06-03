@@ -325,10 +325,10 @@ export default function DashboardPage() {
                   Clients
                 </Link>
                 <Link
-                  href="/recurring"
+                  href="/services"
                   className="px-3 py-1.5 rounded-md text-sm text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
                 >
-                  Recurring
+                  Services
                 </Link>
               </nav>
             </div>
