@@ -1,6 +1,6 @@
 "use client";
 
-import pb from "@/lib/pocketbase";
+import pb, { ensurePocketBaseAuth } from "@/lib/pocketbase";
 import type { RecordModel } from "pocketbase";
 import {
   createContext,
@@ -23,7 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<RecordModel | null>(
     pb.authStore.record ?? null,
   );
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(pb.authStore.isValid);
 
   useEffect(() => {
     // Sync user state whenever the auth store changes
@@ -33,12 +33,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     // Verify the stored token is still valid
     if (pb.authStore.isValid) {
-      pb.collection("users")
-        .authRefresh()
+      ensurePocketBaseAuth(true)
         .catch(() => pb.authStore.clear())
         .finally(() => setIsLoading(false));
-    } else {
-      setIsLoading(false);
     }
 
     return unsub;
