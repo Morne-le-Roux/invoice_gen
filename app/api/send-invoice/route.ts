@@ -159,14 +159,24 @@ export async function POST(request: Request) {
     body: JSON.stringify(smtp2goPayload),
   });
 
-  const result = (await response.json()) as {
+  let result: {
     data?: { succeeded: number; failed: number };
     error?: { code: number; message: string };
-  };
+  } = {};
+  const responseText = await response.text();
+  if (responseText) {
+    try {
+      result = JSON.parse(responseText);
+    } catch {
+      // non-JSON response; fall through to status check below
+    }
+  }
 
   if (!response.ok || result.data?.succeeded !== 1) {
     const errorMsg =
-      result.error?.message ?? "Failed to send email via SMTP2GO.";
+      result.error?.message ??
+      responseText ??
+      "Failed to send email via SMTP2GO.";
     return NextResponse.json({ error: errorMsg }, { status: 502 });
   }
 
